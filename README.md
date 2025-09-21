@@ -110,43 +110,43 @@ El programa sigue un flujo lógico desde el inicio hasta la gestión de eventos.
 
 ```mermaid
 graph TD
-    A[Inicio: Ejecutar ./ircserv] --> B{argc == 3?};
-    B -->|No| C[Error: Mostrar uso y salir];
-    B -->|Sí| D{Puerto válido?};
-    D -->|No| E[Error: Puerto inválido y salir];
-    D -->|Sí| F[Crear instancia de Server(port, password)];
+    A["Inicio: Ejecutar ./ircserv"] --> B{"argc == 3?"};
+    B -->|No| C["Error: Mostrar uso y salir"];
+    B -->|Sí| D{"Puerto válido?"};
+    D -->|No| E["Error: Puerto inválido y salir"];
+    D -->|Sí| F["Crear instancia de Server(port, password)"];
 
     subgraph "server.start()"
-        F --> G[_setupServerSocket];
-        G --> H[_runEventLoop];
+        F --> G["_setupServerSocket"];
+        G --> H["_runEventLoop"];
     end
 
     subgraph "Error Handling"
-        F --> Z[catch (std::exception)];
-        Z --> Z1[Imprimir error y salir];
+        F --> Z["catch (std::exception)"];
+        Z --> Z1["Imprimir error y salir"];
     end
 
     subgraph "Configuración del Socket: _setupServerSocket()"
-        G --> G1[socket(): Crear socket del servidor];
-        G1 --> G2[setsockopt(): Configurar SO_REUSEADDR];
-        G2 --> G3[fcntl(): Establecer modo O_NONBLOCK];
-        G3 --> G4[bind(): Enlazar a puerto y dirección];
-        G4 --> G5[listen(): Poner en modo escucha];
-        G5 --> G6[Añadir server_fd a _fds para vigilar con POLLIN];
+        G --> G1["socket(): Crear socket del servidor"];
+        G1 --> G2["setsockopt(): Configurar SO_REUSEADDR"];
+        G2 --> G3["fcntl(): Establecer modo O_NONBLOCK"];
+        G3 --> G4["bind(): Enlazar a puerto y dirección"];
+        G4 --> G5["listen(): Poner en modo escucha"];
+        G5 --> G6["Añadir server_fd a _fds para vigilar con POLLIN"];
     end
 
     subgraph "Bucle Principal de Eventos: _runEventLoop()"
-        H --> I{while(true)};
-        I --> J[poll(_fds): Esperar actividad];
-        J --> K{poll() retorna > 0?};
-        K -->|Sí| L{Actividad en server_fd? (índice 0)};
-        K -->|No/Error| M[Error: poll() falló y lanzar excepción];
+        H --> I{"while(true)"};
+        I --> J["poll(_fds): Esperar actividad"];
+        J --> K{"poll() retorna > 0?"};
+        K -->|Sí| L{"Actividad en server_fd? (índice 0)"};
+        K -->|No/Error| M["Error: poll() falló y lanzar excepción"];
 
-        L -->|Sí| N[_handleNewConnection];
-        L -->|No| O[Bucle: Recorrer sockets de clientes];
+        L -->|Sí| N["_handleNewConnection"];
+        L -->|No| O["Bucle: Recorrer sockets de clientes"];
         
-        O --> P{Cliente[i] con actividad?};
-        P -->|Sí| Q[_handleClientData(i)];
+        O --> P{"Cliente[i] con actividad?"};
+        P -->|Sí| Q["_handleClientData(i)"];
         P -->|No| O;
         
         N --> I;
@@ -154,16 +154,16 @@ graph TD
     end
     
     subgraph "Gestión de Nueva Conexión: _handleNewConnection()"
-        N --> N1[accept(): Aceptar nuevo cliente];
-        N1 --> N2{accept() exitoso?};
-        N2 -->|No| N3[Imprimir advertencia y retornar];
-        N2 -->|Sí| N4[Crear pollfd para el nuevo cliente];
-        N4 --> N5[Añadir cliente a _fds];
-        N5 --> N6[Imprimir log de nueva conexión];
+        N --> N1["accept(): Aceptar nuevo cliente"];
+        N1 --> N2{"accept() exitoso?"};
+        N2 -->|No| N3["Imprimir advertencia y retornar"];
+        N2 -->|Sí| N4["Crear pollfd para el nuevo cliente"];
+        N4 --> N5["Añadir cliente a _fds"];
+        N5 --> N6["Imprimir log de nueva conexión"];
     end
 
     subgraph "Gestión de Datos del Cliente: _handleClientData()"
-        Q --> Q1[Imprimir log de actividad];
-        Q1 --> Q2[FIN (Lógica de recv() pendiente)];
+        Q --> Q1["Imprimir log de actividad"];
+        Q1 --> Q2["FIN (Lógica de recv() pendiente)"];
     end
 ```
