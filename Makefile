@@ -5,7 +5,12 @@ CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -Iinclude
 SRC_DIR = src
 OBJ_DIR = obj
 
-SRCS = $(wildcard $(SRC_DIR)/*.cpp)
+SRCS = $(addprefix $(SRC_DIR)/, \
+            main.cpp \
+	    Server.cpp \
+	    Client.cpp \
+	    Channel.cpp \
+	    CommandHandler.cpp)
 OBJS = $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRCS))
 
 all: $(NAME)
