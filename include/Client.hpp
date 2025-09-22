@@ -14,8 +14,13 @@ class Client {
 	int         _fd;
 	std::string _buffer;
 
-	// Future attributes like _nickname, _username, _is_authenticated will go
-	// here
+	std::string _nickname;
+	std::string _username;
+	bool        _is_authenticated;
+
+	Client(void);
+	Client(Client const &src);
+	Client &operator=(Client const &rhs);
 };
 
 #endif

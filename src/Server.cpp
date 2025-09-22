@@ -13,8 +13,12 @@ Server::Server(int port, std::string password)
 	std::cout << "Server created on port: " << this->_port << std::endl;
 }
 
-// Destructor: Ensures the server socket is closed.
+// Destructor: Cleans up resources.
 Server::~Server(void) {
+	for (std::map<int, Client *>::iterator it = this->_clients.begin();
+	     it != this->_clients.end(); ++it) {
+		delete it->second;
+	}
 	if (this->_server_fd != -1) {
 		close(this->_server_fd);
 	}
@@ -96,7 +100,7 @@ void Server::_handleNewConnection(void) {
 	client_poll_fd.events = POLLIN;
 	this->_fds.push_back(client_poll_fd);
 
-	this->_clients.insert(std::make_pair(client_fd, Client(client_fd)));
+	this->_clients.insert(std::make_pair(client_fd, new Client(client_fd)));
 
 	std::cout << "New connection accepted. Client fd: " << client_fd
 	          << std::endl;
@@ -121,8 +125,6 @@ void Server::_handleClientData(size_t client_idx) {
 	} else {
 		buffer[nbytes] = '\0';
 		std::cout << "Received from client " << client_fd << ": " << buffer;
-		// Here we would append the buffer to the client's internal buffer
-		// and process for full commands.
 	}
 }
 
@@ -130,8 +132,10 @@ void Server::_handleClientData(size_t client_idx) {
 void Server::_removeClient(size_t client_idx) {
 	int client_fd = this->_fds[client_idx].fd;
 
-	close(client_fd);
+	delete this->_clients[client_fd];
 	this->_clients.erase(client_fd);
+
+	close(client_fd);
 	this->_fds.erase(this->_fds.begin() + client_idx);
 
 	std::cout << "Client " << client_fd << " removed." << std::endl;
