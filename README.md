@@ -1,169 +1,198 @@
-# ft_irc: Servidor de Internet Relay Chat en C++98
+# ft_irc: Implementación de un Servidor IRC en C++98
 
-Este proyecto consiste en la creación de un servidor de IRC desde cero en C++98, adhiriéndose a las especificaciones de las RFCs y capaz de gestionar múltiples clientes de forma simultánea utilizando I/O no bloqueante.
+Este repositorio contiene el código fuente de `ircserv`, un servidor de Internet Relay Chat (IRC) desarrollado desde cero en C++98. El proyecto se adhiere a las especificaciones fundamentales del protocolo IRC, permitiendo a múltiples clientes conectarse, unirse a canales y comunicarse en tiempo real.
 
----
-
-## 1. Funciones Utilizadas
-
-A continuación se listan todas las funciones externas utilizadas en el proyecto, organizadas por la librería de la que provienen.
-
-### **`<sys/socket.h>`**
-* `socket()`: Crea un punto final de comunicación (socket) y devuelve un file descriptor.
-* `setsockopt()`: Permite configurar opciones en un socket. Lo usamos para `SO_REUSEADDR`.
-* `bind()`: Asocia un socket a una dirección IP y un número de puerto.
-* `listen()`: Pone un socket en modo pasivo, esperando a que los clientes se conecten.
-* `accept()`: Extrae la primera conexión de la cola de pendientes y crea un nuevo socket para ella.
-
-### **`<poll.h>`**
-* `poll()`: Espera a que ocurra un evento en un conjunto de file descriptors, permitiendo la multiplexación de I/O.
-
-### **`<fcntl.h>`**
-* `fcntl()`: Realiza varias operaciones sobre un file descriptor. La usamos para establecer el modo no bloqueante (`O_NONBLOCK`).
-
-### **`<unistd.h>`**
-* `close()`: Cierra un file descriptor, liberando el recurso.
-
-### **`<netinet/in.h>`**
-* `htons()`: Convierte un número de 16 bits (como un puerto) del orden de bytes del host al orden de bytes de la red (network byte order).
-
-### **`<iostream>`**
-* `std::cout`: Objeto de flujo de salida estándar (generalmente la terminal).
-* `std::cerr`: Objeto de flujo de salida de errores estándar.
-
-### **`<string>`**
-* `std::string`: Clase para la manipulación de secuencias de caracteres.
-
-### **`<vector>`**
-* `std::vector`: Contenedor dinámico que almacena elementos en secuencia.
-
-### **`<cstdlib>`**
-* `atoi()`: Convierte una cadena de caracteres a un entero.
-* `EXIT_FAILURE`: Macro que representa un código de salida de error.
-
-### **`<stdexcept>`**
-* `std::runtime_error`: Clase de excepción estándar para reportar errores detectados en tiempo de ejecución.
+La principal restricción técnica y, a su vez, el núcleo del diseño, es el uso de **entrada/salida no bloqueante** y la multiplexación de eventos a través de `poll()`. Esto permite al servidor gestionar un gran número de conexiones concurrentes en un único hilo de ejecución, sin recurrir a `fork()` ni a `threads`, tal y como exige el `subject` del proyecto.
 
 ---
 
-## 2. Arquitectura de Clases
+## 🏗️ 1. Arquitectura y Filosofía de Diseño
 
-La arquitectura del servidor se centra en la clase `Server`, que encapsula toda la lógica de red.
+La arquitectura del servidor se fundamenta en el **Principio de Responsabilidad Única (SRP)**. Cada clase tiene un propósito claro y bien definido, lo que resulta en un sistema más modular, mantenible y escalable.
 
-### **`Server.hpp`**
+### `Server`
+Es la clase orquestadora. Actúa como el núcleo central que gestiona toda la infraestructura de red y el ciclo de vida de los clientes.
 
-#### Descripción
-La clase `Server` es el corazón del programa. Es responsable de inicializar el socket de escucha, gestionar el ciclo de vida del servidor y manejar las conexiones de los clientes.
+* **Responsabilidades Clave:**
+    * **Inicialización:** Configura y enlaza el socket de escucha principal.
+    * **Bucle de Eventos:** Ejecuta el bucle infinito que espera y despacha eventos de red usando `poll()`.
+    * **Gestión de Clientes:** Acepta nuevas conexiones, crea los objetos `Client` correspondientes y los destruye cuando se desconectan.
+    * **Punto de Acceso:** Proporciona a otras partes del sistema (como el `CommandHandler`) los mecanismos para interactuar con los clientes (ej: enviar mensajes).
 
-#### Atributos Privados
-* `int _port`: Almacena el puerto en el que el servidor está escuchando.
-* `std::string _password`: Almacena la contraseña requerida para que los clientes se conecten.
-* `int _server_fd`: El file descriptor del socket principal de escucha del servidor.
-* `std::vector<struct pollfd> _fds`: Un vector que contiene las estructuras `pollfd` para todos los sockets que se están vigilando (el del servidor y los de los clientes).
+* **Atributos Notables:**
+    * `_server_fd`: El file descriptor del socket de escucha. Es el único socket que acepta nuevas conexiones.
+    * `std::vector<struct pollfd> _fds`: El corazón de la concurrencia. Este vector contiene no solo el `_server_fd`, sino los `fd` de todos los clientes conectados. `poll()` lo utiliza para monitorizar qué socket tiene datos listos para ser leídos.
+    * `std::map<int, Client *> _clients`: Un mapa que asocia el `file descriptor` de un cliente con su objeto `Client`. Este diseño es crucial para poder acceder de forma eficiente al estado de un cliente (`O(log N)`) a partir de su `fd`.
 
-#### Métodos Públicos
-* `Server(int port, std::string password)`: Constructor que inicializa el servidor con un puerto y una contraseña.
-* `~Server()`: Destructor que se asegura de cerrar el socket del servidor para liberar los recursos.
-* `void start()`: El método principal que orquesta el inicio del servidor.
+### `Client`
+Representa a un usuario conectado. Cada instancia encapsula el estado completo y la información asociada a una única conexión.
 
-#### Métodos Privados
-* `void _setupServerSocket()`: Realiza toda la configuración inicial del socket del servidor: `socket`, `setsockopt`, `fcntl`, `bind` y `listen`.
-* `void _runEventLoop()`: Contiene el bucle `while(true)` principal del servidor, donde se llama a `poll()` para esperar y gestionar eventos de red.
-* `void _handleNewConnection()`: Se encarga de aceptar una nueva conexión de cliente entrante y añadirla al vector `_fds` para ser vigilada.
-* `void _handleClientData(int client_idx)`: (Actualmente un placeholder) Será la función encargada de gestionar los datos recibidos de un cliente existente.
+* **Responsabilidades Clave:**
+    * **Gestión de Estado:** Almacena información vital como el nickname, username, y si el cliente ha completado el proceso de autenticación.
+    * **Gestión de Búfer:** Mantiene un búfer de entrada (`_buffer`) para ensamblar comandos completos. Esto es **fundamental** para un servidor TCP, ya que los datos pueden llegar fragmentados. La clase se encarga de acumular datos hasta que se recibe un delimitador `\r\n`.
+
+* **Atributos Notables:**
+    * `int _fd`: El file descriptor del socket del cliente, que lo identifica unívocamente a nivel de red.
+    * `std::string _buffer`: Búfer de acumulación para los datos recibidos vía `recv()`.
+    * `_nickname`, `_username`, `_is_authenticated`: Atributos que definen la identidad y el estado del usuario dentro del protocolo IRC.
+
+### `CommandHandler`
+Es el cerebro lógico del protocolo IRC. Su única misión es desacoplar la lógica de red de la lógica de la aplicación.
+
+* **Responsabilidades Clave:**
+    * **Parseo:** Recibe una cadena de comando completa (ej: `PRIVMSG #canal :Hola!`) y la descompone en sus componentes: prefijo, comando y parámetros.
+    * **Despacho (Dispatching):** Utiliza un sistema (típicamente un `std::map`) para asociar el nombre de un comando con la función miembro que debe ejecutarlo. Esto evita un bloque `if-else` masivo y hace que añadir nuevos comandos sea trivial.
+    * **Ejecución:** Invoca la lógica específica para cada comando, interactuando con las clases `Client` y `Channel` para modificar el estado del servidor.
+
+### `Channel`
+Representa un canal de chat (`#nombre_canal`).
+
+* **Responsabilidades Clave:**
+    * **Gestión de Miembros:** Mantiene una lista de los clientes que se han unido al canal.
+    * **Gestión de Estado:** Almacena propiedades del canal como el topic, la clave (contraseña), y los modos activos (`+i`, `+t`, `+k`, `+l`).
+    * **Gestión de Operadores:** Distingue entre usuarios normales y operadores del canal, aplicando los permisos correspondientes.
+    * **Difusión de Mensajes:** Se encarga de reenviar un mensaje recibido de un miembro a todos los demás miembros del canal.
 
 ---
 
-## 3. Flujo General del Programa
+## 🔄 2. Ciclo de Vida del Servidor y Flujo de Datos
 
-El programa sigue un flujo lógico desde el inicio hasta la gestión de eventos.
+El funcionamiento del servidor puede entenderse como un ciclo continuo de eventos.
 
-1.  **Inicio (`main.cpp`):**
-    * El programa se ejecuta y la función `main` comprueba si se han proporcionado los argumentos correctos (`<port>` y `<password>`).
-    * Valida que el puerto sea un número válido.
-    * Crea una instancia de la clase `Server` dentro de un bloque `try...catch` para capturar cualquier error crítico durante la inicialización.
-    * Llama al método `server.start()`.
+1.  **Arranque (`main` -> `Server::start`)**
+    * El `main` valida los argumentos y crea una instancia de `Server`.
+    * `Server::start()` invoca a `_setupServerSocket()`, que realiza las llamadas críticas al sistema: `socket()`, `setsockopt(SO_REUSEADDR)`, `fcntl(O_NONBLOCK)`, `bind()` y `listen()`.
+    * El `_server_fd` se añade como el primer elemento del vector `_fds`.
 
-2.  **Configuración del Servidor (`Server::_setupServerSocket()`):**
-    * El método `start()` llama a esta función privada para preparar el entorno de red.
-    * Se crea un socket TCP/IP (`socket`).
-    * Se configura para reutilizar la dirección (`setsockopt`).
-    * Se establece en modo no bloqueante (`fcntl`).
-    * Se enlaza al puerto especificado y a todas las interfaces de red disponibles (`bind`).
-    * Se pone en modo de escucha para aceptar conexiones entrantes (`listen`).
-    * Finalmente, añade el file descriptor del socket de escucha a la lista de vigilancia (`_fds`).
+2.  **El Bucle de Eventos (`_runEventLoop`)**
+    * El servidor entra en un `while(true)`. La llamada a `poll(this->_fds.data(), ...)` bloquea la ejecución del programa de forma eficiente hasta que haya actividad en alguno de los sockets que está vigilando.
+    * Cuando `poll()` retorna, el programa itera sobre el vector `_fds` para ver qué descriptores de fichero han generado eventos.
 
-3.  **Bucle de Eventos (`Server::_runEventLoop()`):**
-    * Una vez configurado, el servidor entra en un bucle infinito.
-    * La ejecución del programa se bloquea en la llamada a `poll()`, que espera eficientemente a que haya actividad en cualquiera de los sockets vigilados.
-    * Cuando `poll()` devuelve un valor positivo (indicando actividad), el bucle continúa.
-    * **Comprobación de Nuevas Conexiones:** Se comprueba si la actividad ha ocurrido en el socket del servidor. Si es así, se llama a `_handleNewConnection()`.
-    * **Comprobación de Datos de Clientes:** Se recorre el resto de los sockets en la lista `_fds`. Si algún socket de cliente tiene actividad, se llama a `_handleClientData()`.
+3.  **Flujo de una Nueva Conexión**
+    * Si `_fds[0].revents & POLLIN` es verdadero, significa que un nuevo cliente está intentando conectarse.
+    * Se llama a `_handleNewConnection()`.
+    * `accept()` crea un nuevo socket (`client_fd`) para la comunicación con este cliente.
+    * Se crea una nueva instancia `new Client(client_fd)`.
+    * El nuevo `client_fd` y el puntero al `Client` se registran en `_fds` y `_clients` respectivamente. El cliente ahora forma parte del bucle de eventos.
 
-4.  **Gestión de Conexiones (`Server::_handleNewConnection()`):**
-    * Se llama a `accept()` para aceptar al nuevo cliente.
-    * Se crea una nueva estructura `pollfd` para el socket del cliente.
-    * Esta nueva estructura se añade al final del vector `_fds`, integrando al nuevo cliente en el bucle de eventos para futuras comprobaciones.
+4.  **Flujo de Datos de un Cliente Existente**
+    * Si `_fds[i].revents & POLLIN` (con `i > 0`) es verdadero, un cliente ya conectado ha enviado datos.
+    * Se llama a `_handleClientData(i)`.
+    * `recv()` lee los datos del socket.
+    * **(Lógica Futura)** Los datos leídos se añaden al `_buffer` del objeto `Client` correspondiente. Un bucle interno comprobará si el búfer contiene uno o más comandos completos (delimitados por `\r\n`).
+    * Por cada comando completo extraído, se llamará a `commandHandler.handleCommand(client, command_string)`.
 
+5.  **Flujo de una Desconexión**
+    * Si `recv()` en `_handleClientData` retorna `0` (desconexión limpia) o `-1` (error), se inicia el proceso de limpieza.
+    * Se llama a `_removeClient(i)`.
+    * `close(client_fd)` libera el recurso a nivel de sistema operativo.
+    * `delete this->_clients[client_fd]` libera la memoria del objeto `Client`.
+    * Finalmente, las entradas correspondientes en el mapa `_clients` y en el vector `_fds` son eliminadas para mantener el estado del servidor consistente.
 
-### Diagrama de flujo
+---
+
+## 🛠️ 3. Cómo Compilar y Ejecutar
+
+El proyecto incluye un `Makefile` para facilitar la compilación.
+
+1.  **Compilar el proyecto:**
+    ```bash
+    make
+    ```
+    Esto generará un ejecutable llamado `ircserv` en la raíz del proyecto.
+
+2.  **Ejecutar el servidor:**
+    ```bash
+    ./ircserv <port> <password>
+    ```
+    * `<port>`: El puerto en el que el servidor escuchará (ej: 6667).
+    * `<password>`: La contraseña que los clientes necesitarán para conectarse.
+
+3.  **Limpiar los ficheros objeto y el ejecutable:**
+    ```bash
+    make clean  # Elimina los ficheros objeto (*.o)
+    make fclean # Llama a clean y además elimina el ejecutable
+    make re     # Llama a fclean y vuelve a compilar
+    ```
+
+---
+
+## 📊 4. Estado Actual y Próximos Pasos
+
+El proyecto se encuentra en una fase donde la **infraestructura de red es funcional y robusta**.
+
+* **✅ Completado:**
+    * Estructura general del proyecto (`Makefile`, directorios, etc.).
+    * Arquitectura de clases definida (`Server`, `Client`, `CommandHandler`, `Channel`).
+    * Lógica completa para aceptar, gestionar y desconectar múltiples clientes de forma asíncrona usando `poll()`.
+
+* **🚧 Próximos Pasos (Fase 1 del `roadmap.md`):**
+    1.  **Implementar la gestión de búfer:** Modificar `_handleClientData` para que acumule datos en `Client::_buffer` y extraiga comandos completos.
+    2.  **Desarrollar el `CommandParser`:** Crear la lógica que descompone una cadena de comando en sus partes.
+    3.  **Implementar el `CommandDispatcher`:** Construir el mapa en `CommandHandler` que asocia strings de comando a funciones.
+    4.  **Crear API de respuesta:** Desarrollar una función centralizada (`Server::sendReply`) para enviar mensajes a los clientes.
+
+Una vez completada esta fase, la base estará lista para que comience la implementación de la lógica específica de cada comando IRC (Fases 2 y 3 del `roadmap`).
+
+---
+
+## 📈 5. Diagrama de Flujo Detallado
 
 ```mermaid
 graph TD
-    A["Inicio: Ejecutar ./ircserv"] --> B{"argc == 3?"};
-    B -->|No| C["Error: Mostrar uso y salir"];
-    B -->|Sí| D{"Puerto válido?"};
-    D -->|No| E["Error: Puerto inválido y salir"];
-    D -->|Sí| F["Crear instancia de Server(port, password)"];
-
-    subgraph "server.start()"
-        F --> G["_setupServerSocket"];
-        G --> H["_runEventLoop"];
+    subgraph "Fase de Inicio"
+        A["Ejecutar ./ircserv <port> <pass>"] --> B{Valida args};
+        B -->|OK| C["new Server(port, pass)"];
+        B -->|Error| C_ERR["Error y Salir"];
+        C --> D["server.start()"];
     end
 
-    subgraph "Error Handling"
-        F --> Z["catch (std::exception)"];
-        Z --> Z1["Imprimir error y salir"];
-    end
-
-    subgraph "Configuración del Socket: _setupServerSocket()"
-        G --> G1["socket(): Crear socket del servidor"];
-        G1 --> G2["setsockopt(): Configurar SO_REUSEADDR"];
-        G2 --> G3["fcntl(): Establecer modo O_NONBLOCK"];
-        G3 --> G4["bind(): Enlazar a puerto y dirección"];
-        G4 --> G5["listen(): Poner en modo escucha"];
-        G5 --> G6["Añadir server_fd a _fds para vigilar con POLLIN"];
-    end
-
-    subgraph "Bucle Principal de Eventos: _runEventLoop()"
-        H --> I{"while(true)"};
-        I --> J["poll(_fds): Esperar actividad"];
-        J --> K{"poll() retorna > 0?"};
-        K -->|Sí| L{"Actividad en server_fd? (índice 0)"};
-        K -->|No/Error| M["Error: poll() falló y lanzar excepción"];
-
-        L -->|Sí| N["_handleNewConnection"];
-        L -->|No| O["Bucle: Recorrer sockets de clientes"];
-        
-        O --> P{"Cliente[i] con actividad?"};
-        P -->|Sí| Q["_handleClientData(i)"];
-        P -->|No| O;
-        
-        N --> I;
-        Q --> O;
+    subgraph "Server::start()"
+        D --> E["_setupServerSocket()"];
+        E --> F["_runEventLoop()"];
     end
     
-    subgraph "Gestión de Nueva Conexión: _handleNewConnection()"
-        N --> N1["accept(): Aceptar nuevo cliente"];
-        N1 --> N2{"accept() exitoso?"};
-        N2 -->|No| N3["Imprimir advertencia y retornar"];
-        N2 -->|Sí| N4["Crear pollfd para el nuevo cliente"];
-        N4 --> N5["Añadir cliente a _fds"];
-        N5 --> N6["Imprimir log de nueva conexión"];
+    subgraph "Configuración: _setupServerSocket()"
+        E --> E1["socket() -> _server_fd"];
+        E1 --> E2["setsockopt() & fcntl(O_NONBLOCK)"];
+        E2 --> E3["bind() & listen()"];
+        E3 --> E4["Añadir _server_fd a _fds"];
     end
 
-    subgraph "Gestión de Datos del Cliente: _handleClientData()"
-        Q --> Q1["Imprimir log de actividad"];
-        Q1 --> Q2["FIN (Lógica de recv() pendiente)"];
+    subgraph "Ciclo Principal: _runEventLoop()"
+        F --> G{"while (true)"};
+        G --> H["poll(_fds) -> Bloquea hasta evento"];
+        H --> I{"Evento en _server_fd?"};
+        
+        I -->|Sí| J["_handleNewConnection()"];
+        J --> G;
+        
+        I -->|No| K["Iterar en fds de clientes"];
+        K --> L{"Evento en client_fd[i]?"};
+        L -->|Sí| M["_handleClientData(i)"];
+        M --> K; 
+        L -->|No| K;
+    end
+
+    subgraph "Nueva Conexión: _handleNewConnection()"
+        J --> J1["accept() -> client_fd"];
+        J1 --> J2["new Client(client_fd)"];
+        J2 --> J3["Añadir a _fds (para poll)"];
+        J3 --> J4["Añadir a _clients (para estado)"];
+    end
+
+    subgraph "Recepción de Datos: _handleClientData(i)"
+        M --> M1["recv(client_fd) -> nbytes"];
+        M1 --> M2{nbytes <= 0 ?};
+        M2 -->|Sí (Desconexión/Error)| M_ERR;
+        M2 -->|No| M_OK["1. Acumular en Client::_buffer"];
+        M_OK --> M_OK2["2. Extraer comandos ('\\r\\n')"];
+        M_OK2 --> M_OK3["3. commandHandler.handleCommand()"];
+    end
+
+    subgraph "Limpieza: _removeClient(i)"
+        M_ERR["_removeClient(i)"] --> Z1["close(client_fd)"];
+        Z1 --> Z2["delete _clients[fd]"];
+        Z2 --> Z3["Borrar de _clients y _fds"];
     end
 ```
