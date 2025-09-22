@@ -1,33 +1,33 @@
 #pragma once
 
 #ifndef SERVER_HPP
-# define SERVER_HPP
+#define SERVER_HPP
 
-# include <string>
-# include <vector>
-# include <poll.h>
+#include "Client.hpp"
+#include <map>
+#include <poll.h>
+#include <string>
+#include <vector>
 
 class Server {
-    public:
-        // Constructor & Destructor
-        Server(int port, std::string password);
-        ~Server(void);
+  public:
+	Server(int port, std::string password);
+	~Server(void);
 
-        // Public method to start the server
-        void start(void);
+	void start(void);
 
-    private:
-        // Server attributes
-        int                         _port;
-        std::string                 _password;
-        int                         _server_fd;
-        std::vector<struct pollfd>  _fds;
+  private:
+	int                        _port;
+	std::string                _password;
+	int                        _server_fd;
+	std::vector<struct pollfd> _fds;
+	std::map<int, Client>      _clients;
 
-        // Private methods for internal logic
-        void _setupServerSocket(void);
-        void _runEventLoop(void);
-        void _handleNewConnection(void);
-        void _handleClientData(int client_idx);
+	void _setupServerSocket(void);
+	void _runEventLoop(void);
+	void _handleNewConnection(void);
+	void _handleClientData(size_t client_idx);
+	void _removeClient(size_t client_idx);
 };
 
 #endif

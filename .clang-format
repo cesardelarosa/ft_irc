@@ -1,0 +1,45 @@
+# Estilo de Clang-Format definitivo para 42 C++
+Language: Cpp
+BasedOnStyle: LLVM
+
+# --- Indentación ---
+# Usa tabuladores para la indentación, espacios para la alineación.
+UseTab: ForIndentation
+IndentWidth: 4
+TabWidth: 4
+IndentCaseLabels: false
+
+# --- Saltos de línea y llaves (Braces) ---
+# Estilo 42: Las llaves de apertura van en la misma línea.
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: None
+AllowShortBlocksOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+# --- Alineación (Rescatado del fichero que encontraste) ---
+# Alínea las declaraciones de variables consecutivas para mayor legibilidad.
+# int  a = 1;
+# bool b = true;
+AlignConsecutiveDeclarations: true
+# Alinea correctamente las barras invertidas en macros multilínea.
+AlignEscapedNewlinesLeft: true
+
+# --- Espaciado ---
+SpaceBeforeParens: ControlStatements
+SpaceBeforeAssignmentOperators: true
+SpaceAfterCStyleCast: false
+SpacesInParentheses: false
+SpacesInCStyleCastParentheses: false
+
+# --- Punteros ---
+PointerAlignment: Right
+
+# --- Límite de Columnas ---
+ColumnLimit: 80
+
+# --- Preprocesador e Includes ---
+# No indenta ninguna directiva de preprocesador (#include, #define, #ifndef).
+# Esto mantiene todo limpio y alineado a la izquierda.
+IndentPPDirectives: None
+# Ordena los #includes alfabéticamente.
+SortIncludes: true

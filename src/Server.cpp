@@ -1,97 +1,138 @@
 #include "Server.hpp"
+#include <fcntl.h>
 #include <iostream>
+#include <netinet/in.h>
 #include <stdexcept>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <netinet/in.h>
-#include <fcntl.h>
+#include <vector>
 
 // Constructor: Initializes server attributes.
-Server::Server(int port, std::string password) : _port(port), _password(password), _server_fd(-1) {
-    std::cout << "Server created on port: " << this->_port << std::endl;
+Server::Server(int port, std::string password)
+    : _port(port), _password(password), _server_fd(-1) {
+	std::cout << "Server created on port: " << this->_port << std::endl;
 }
 
-// Destructor: Ensures the server socket is closed upon object destruction.
+// Destructor: Ensures the server socket is closed.
 Server::~Server(void) {
-    if (this->_server_fd != -1) {
-        close(this->_server_fd);
-    }
+	if (this->_server_fd != -1) {
+		close(this->_server_fd);
+	}
 }
 
-// Orchestrates the server startup by setting up the socket and running the main event loop.
+// Orchestrates the server startup.
 void Server::start(void) {
-    _setupServerSocket();
-    _runEventLoop();
+	_setupServerSocket();
+	_runEventLoop();
 }
 
-// Handles the creation, configuration, binding, and listening of the server socket.
-// Throws a runtime_error if any step fails, ensuring a clean exit.
+// Sets up the server socket.
 void Server::_setupServerSocket(void) {
-    sockaddr_in address;
-    int opt = 1;
+	sockaddr_in address;
+	int         opt = 1;
 
-    this->_server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (this->_server_fd == -1)
-        throw std::runtime_error("Failed to create socket.");
+	this->_server_fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (this->_server_fd == -1)
+		throw std::runtime_error("Failed to create socket.");
 
-    if (setsockopt(this->_server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
-        throw std::runtime_error("Failed to set socket options.");
-    
-    if (fcntl(this->_server_fd, F_SETFL, O_NONBLOCK) == -1)
-        throw std::runtime_error("Failed to set socket to non-blocking.");
+	if (setsockopt(this->_server_fd, SOL_SOCKET, SO_REUSEADDR, &opt,
+	               sizeof(opt)) == -1)
+		throw std::runtime_error("Failed to set socket options.");
 
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(this->_port);
-    if (bind(this->_server_fd, (struct sockaddr *)&address, sizeof(address)) == -1)
-        throw std::runtime_error("Failed to bind to port.");
+	if (fcntl(this->_server_fd, F_SETFL, O_NONBLOCK) == -1)
+		throw std::runtime_error("Failed to set socket to non-blocking.");
 
-    if (listen(this->_server_fd, 10) == -1)
-        throw std::runtime_error("Failed to listen on socket.");
+	address.sin_family = AF_INET;
+	address.sin_addr.s_addr = INADDR_ANY;
+	address.sin_port = htons(this->_port);
+	if (bind(this->_server_fd, (struct sockaddr *)&address, sizeof(address)) ==
+	    -1)
+		throw std::runtime_error("Failed to bind to port.");
 
-    struct pollfd server_poll_fd;
-    server_poll_fd.fd = this->_server_fd;
-    server_poll_fd.events = POLLIN;
-    this->_fds.push_back(server_poll_fd);
+	if (listen(this->_server_fd, 10) == -1)
+		throw std::runtime_error("Failed to listen on socket.");
+
+	struct pollfd server_poll_fd;
+	server_poll_fd.fd = this->_server_fd;
+	server_poll_fd.events = POLLIN;
+	this->_fds.push_back(server_poll_fd);
 }
 
-// Contains the main server loop that waits for and handles network events.
+// Runs the main server event loop.
 void Server::_runEventLoop(void) {
-    std::cout << "Server is listening on port " << this->_port << "..." << std::endl;
+	std::cout << "Server is listening on port " << this->_port << "..."
+	          << std::endl;
 
-    while (true) {
-        if (poll(this->_fds.data(), this->_fds.size(), -1) == -1)
-            throw std::runtime_error("poll() failed.");
+	while (true) {
+		if (poll(this->_fds.data(), this->_fds.size(), -1) == -1)
+			throw std::runtime_error("poll() failed.");
 
-        if (this->_fds[0].revents & POLLIN)
-            _handleNewConnection();
+		if (this->_fds[0].revents & POLLIN)
+			_handleNewConnection();
 
-        for (size_t i = 1; i < this->_fds.size(); ++i) {
-            if (this->_fds[i].revents & POLLIN)
-                _handleClientData(i);
-        }
-    }
+		for (size_t i = 1; i < this->_fds.size(); ++i) {
+			if (this->_fds[i].revents & POLLIN)
+				_handleClientData(i);
+		}
+	}
 }
 
-// Accepts a new client connection and adds it to the list of file descriptors to monitor.
+// Handles a new client connection.
 void Server::_handleNewConnection(void) {
-    int client_fd = accept(this->_server_fd, NULL, NULL);
-    if (client_fd == -1) {
-        std::cerr << "Warning: accept() failed." << std::endl;
-        return;
-    }
+	int client_fd = accept(this->_server_fd, NULL, NULL);
+	if (client_fd == -1) {
+		std::cerr << "Warning: accept() failed." << std::endl;
+		return;
+	}
 
-    struct pollfd client_poll_fd;
-    client_poll_fd.fd = client_fd;
-    client_poll_fd.events = POLLIN;
-    this->_fds.push_back(client_poll_fd);
+	if (fcntl(client_fd, F_SETFL, O_NONBLOCK) == -1) {
+		std::cerr << "Warning: fcntl() failed on client fd." << std::endl;
+		close(client_fd);
+		return;
+	}
 
-    std::cout << "New connection accepted. Client fd: " << client_fd << std::endl;
+	struct pollfd client_poll_fd;
+	client_poll_fd.fd = client_fd;
+	client_poll_fd.events = POLLIN;
+	this->_fds.push_back(client_poll_fd);
+
+	this->_clients.insert(std::make_pair(client_fd, Client(client_fd)));
+
+	std::cout << "New connection accepted. Client fd: " << client_fd
+	          << std::endl;
 }
 
-// Placeholder for handling data received from a client.
-void Server::_handleClientData(int client_idx) {
-    // This is where the logic to receive (recv) and process messages will go.
-    std::cout << "Activity detected on client fd: " << this->_fds[client_idx].fd << std::endl;
-    // For now, we do nothing with it.
+// Handles data received from a client.
+void Server::_handleClientData(size_t client_idx) {
+	char buffer[512];
+	int  client_fd = this->_fds[client_idx].fd;
+
+	int nbytes = recv(client_fd, buffer, sizeof(buffer), 0);
+
+	if (nbytes <= 0) {
+		if (nbytes == 0)
+			std::cout << "Client " << client_fd << " disconnected."
+			          << std::endl;
+		else
+			std::cerr << "Error: recv() failed for client " << client_fd
+			          << std::endl;
+
+		_removeClient(client_idx);
+	} else {
+		buffer[nbytes] = '\0';
+		std::cout << "Received from client " << client_fd << ": " << buffer;
+		// Here we would append the buffer to the client's internal buffer
+		// and process for full commands.
+	}
+}
+
+// Removes a client from all server data structures.
+void Server::_removeClient(size_t client_idx) {
+	int client_fd = this->_fds[client_idx].fd;
+
+	close(client_fd);
+	this->_clients.erase(client_fd);
+	this->_fds.erase(this->_fds.begin() + client_idx);
+
+	std::cout << "Client " << client_fd << " removed." << std::endl;
 }
