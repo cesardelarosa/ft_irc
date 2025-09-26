@@ -4,6 +4,9 @@ ircserv
 # Subject
 *subject.pdf
 
+# IDE config
+.idea
+
 # Prerequisites
 *.d
 

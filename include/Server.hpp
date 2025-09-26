@@ -12,9 +12,9 @@
 class Server {
   public:
 	Server(int port, std::string password);
-	~Server(void);
+	~Server();
 
-	void start(void);
+	void start();
 
   private:
 	int                        _port;
@@ -23,13 +23,13 @@ class Server {
 	std::vector<struct pollfd> _fds;
 	std::map<int, Client *>    _clients;
 
-	void _setupServerSocket(void);
-	void _runEventLoop(void);
-	void _handleNewConnection(void);
+	void _setupServerSocket();
+	void _runEventLoop();
+	void _handleNewConnection();
 	void _handleClientData(size_t client_idx);
 	void _removeClient(size_t client_idx);
 
-	Server(void);
+	Server();
 	Server(Server const &src);
 	Server &operator=(Server const &rhs);
 };

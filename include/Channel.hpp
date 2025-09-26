@@ -10,12 +10,12 @@ class Client;
 class Channel {
   public:
 	Channel(std::string const &name);
-	~Channel(void);
+	~Channel();
 
   private:
 	std::string _name;
 
-	Channel(void);
+	Channel();
 	Channel(Channel const &src);
 	Channel &operator=(Channel const &rhs);
 };

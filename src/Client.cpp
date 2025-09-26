@@ -3,5 +3,5 @@
 Client::Client(int fd) : _fd(fd) {
 }
 
-Client::~Client(void) {
+Client::~Client() {
 }

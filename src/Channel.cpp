@@ -3,5 +3,5 @@
 Channel::Channel(std::string const &name) : _name(name) {
 }
 
-Channel::~Channel(void) {
+Channel::~Channel() {
 }

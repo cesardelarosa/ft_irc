@@ -4,7 +4,7 @@
 CommandHandler::CommandHandler(Server *server) : _server(server) {
 }
 
-CommandHandler::~CommandHandler(void) {
+CommandHandler::~CommandHandler() {
 }
 
 void CommandHandler::handleCommand(Client &client, std::string const &message) {

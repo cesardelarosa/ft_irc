@@ -14,7 +14,7 @@ Server::Server(int port, std::string password)
 }
 
 // Destructor: Cleans up resources.
-Server::~Server(void) {
+Server::~Server() {
 	for (std::map<int, Client *>::iterator it = this->_clients.begin();
 	     it != this->_clients.end(); ++it) {
 		delete it->second;
@@ -25,13 +25,13 @@ Server::~Server(void) {
 }
 
 // Orchestrates the server startup.
-void Server::start(void) {
+void Server::start() {
 	_setupServerSocket();
 	_runEventLoop();
 }
 
 // Sets up the server socket.
-void Server::_setupServerSocket(void) {
+void Server::_setupServerSocket() {
 	sockaddr_in address;
 	int         opt = 1;
 
@@ -63,7 +63,7 @@ void Server::_setupServerSocket(void) {
 }
 
 // Runs the main server event loop.
-void Server::_runEventLoop(void) {
+void Server::_runEventLoop() {
 	std::cout << "Server is listening on port " << this->_port << "..."
 	          << std::endl;
 
@@ -82,7 +82,7 @@ void Server::_runEventLoop(void) {
 }
 
 // Handles a new client connection.
-void Server::_handleNewConnection(void) {
+void Server::_handleNewConnection() {
 	int client_fd = accept(this->_server_fd, NULL, NULL);
 	if (client_fd == -1) {
 		std::cerr << "Warning: accept() failed." << std::endl;

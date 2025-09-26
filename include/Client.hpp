@@ -8,7 +8,7 @@
 class Client {
   public:
 	Client(int fd);
-	~Client(void);
+	~Client();
 
   private:
 	int         _fd;
@@ -18,7 +18,7 @@ class Client {
 	std::string _username;
 	bool        _is_authenticated;
 
-	Client(void);
+	Client();
 	Client(Client const &src);
 	Client &operator=(Client const &rhs);
 };
