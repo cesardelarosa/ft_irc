@@ -9,7 +9,7 @@
 
 // Constructor: Initializes server attributes.
 Server::Server(int port, std::string password)
-    : _port(port), _password(password), _server_fd(-1) {
+    : _port(port), _password(password), _server_fd(-1), _commandHandler(this) {
 	std::cout << "Server created on port: " << this->_port << std::endl;
 }
 
@@ -123,8 +123,27 @@ void Server::_handleClientData(size_t client_idx) {
 
 		_removeClient(client_idx);
 	} else {
-		buffer[nbytes] = '\0';
-		std::cout << "Received from client " << client_fd << ": " << buffer;
+		std::map<int, Client *>::iterator it = this->_clients.find(client_fd);
+		if (it != this->_clients.end()) {
+			it->second->addToBuffer(buffer, nbytes);
+			_processClientCommands(*it->second);
+		}
+	}
+}
+
+// Processes the buffer of a client, looking for "/r/n" delimiter.
+void Server::_processClientCommands(Client &client) {
+	std::string &buffer = client.getBuffer();
+	size_t       pos = 0;
+	while ((pos = buffer.find("\r\n")) != std::string::npos) {
+		std::string command_line = buffer.substr(0, pos);
+		buffer.erase(0, pos + 2);
+
+		if (!command_line.empty()) {
+			std::cout << "Processing command: [" << command_line << "]"
+			          << std::endl;
+			this->_commandHandler.handleCommand(client, command_line);
+		}
 	}
 }
 

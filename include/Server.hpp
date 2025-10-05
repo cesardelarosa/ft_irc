@@ -3,7 +3,9 @@
 #ifndef SERVER_HPP
 #define SERVER_HPP
 
+#include "Channel.hpp"
 #include "Client.hpp"
+#include "CommandHandler.hpp"
 #include <map>
 #include <poll.h>
 #include <string>
@@ -22,12 +24,14 @@ class Server {
 	int                        _server_fd;
 	std::vector<struct pollfd> _fds;
 	std::map<int, Client *>    _clients;
+	CommandHandler             _commandHandler;
 
 	void _setupServerSocket();
 	void _runEventLoop();
 	void _handleNewConnection();
 	void _handleClientData(size_t client_idx);
 	void _removeClient(size_t client_idx);
+	void _processClientCommands(Client &client);
 
 	Server();
 	Server(Server const &src);
