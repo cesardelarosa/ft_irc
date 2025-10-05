@@ -17,6 +17,7 @@ class Server {
 	~Server();
 
 	void start();
+	void sendReply(const Client &client, const std::string &message);
 
   private:
 	int                        _port;

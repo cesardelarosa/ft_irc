@@ -18,16 +18,38 @@ void CommandHandler::handleCommand(Client &client, std::string const &message) {
 
 void CommandHandler::_parseAndExecute(Client            &client,
                                       const std::string &raw_command) {
-	std::stringstream ss(raw_command);
-	std::string       command;
-	ss >> command;
-
+	std::string              line = raw_command;
 	std::vector<std::string> args;
-	std::string              arg;
-	while (ss >> arg) {
-		args.push_back(arg);
+
+	// 1. Find trailing argument (prefixed with ' :')
+	size_t colon_pos = line.find(" :");
+	if (colon_pos != std::string::npos) {
+		// The trailing part is everything after the " :"
+		args.push_back(line.substr(colon_pos + 2));
+		// The rest of the line is processed for command and normal args
+		line.erase(colon_pos);
 	}
 
+	// 2. Tokenize the rest of the line (command and other args)
+	std::stringstream        ss(line);
+	std::string              token;
+	std::vector<std::string> tokens;
+	while (ss >> token) {
+		tokens.push_back(token);
+	}
+
+	if (tokens.empty()) {
+		return; // Empty or whitespace-only command line
+	}
+
+	// 3. Separate command and arguments
+	std::string command = tokens[0];
+	// Insert the non-trailing args at the beginning of the args vector
+	if (tokens.size() > 1) {
+		args.insert(args.begin(), tokens.begin() + 1, tokens.end());
+	}
+
+	// 4. Dispatch the command
 	std::map<std::string, CommandFunction>::iterator it =
 	    this->_commands.find(command);
 
@@ -35,7 +57,7 @@ void CommandHandler::_parseAndExecute(Client            &client,
 		(this->*(it->second))(client, args);
 	} else {
 		std::cout << "Unknown command: " << command << std::endl;
-		// Enviar una respuesta de error numérico al cliente
+		// Here you would typically send a numeric reply like ERR_UNKNOWNCOMMAND
 	}
 }
 
