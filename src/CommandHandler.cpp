@@ -3,19 +3,42 @@
 #include <iostream>
 #include <sstream>
 
+/**
+ * @brief Constructs a new CommandHandler object and registers available
+ * commands.
+ * @param server A pointer to the main Server object, used to interact with the
+ * server state.
+ */
 CommandHandler::CommandHandler(Server *server) : _server(server) {
 	this->_commands["NICK"] = &CommandHandler::_handleNick;
 	this->_commands["USER"] = &CommandHandler::_handleUser;
 	this->_commands["PASS"] = &CommandHandler::_handlePass;
 }
 
+/**
+ * @brief Destroys the CommandHandler object.
+ */
 CommandHandler::~CommandHandler() {
 }
 
+/**
+ * @brief The main entry point for handling a command. It calls the parser and
+ * executor.
+ * @param client The client who sent the command.
+ * @param message The raw command line received from the client.
+ */
 void CommandHandler::handleCommand(Client &client, std::string const &message) {
 	_parseAndExecute(client, message);
 }
 
+/**
+ * @brief Parses a raw command string, identifies the command and its arguments,
+ * and dispatches it.
+ * @details This function correctly handles IRC-style trailing arguments (those
+ * prefixed with a ' :').
+ * @param client The client who sent the command.
+ * @param raw_command The raw command line to parse.
+ */
 void CommandHandler::_parseAndExecute(Client            &client,
                                       const std::string &raw_command) {
 	std::string              line = raw_command;
@@ -61,6 +84,12 @@ void CommandHandler::_parseAndExecute(Client            &client,
 	}
 }
 
+/**
+ * @brief Handles the NICK command to set or change a user's nickname.
+ * @param client The client sending the command.
+ * @param args A vector of arguments. For NICK, it should contain the new
+ * nickname.
+ */
 void CommandHandler::_handleNick(Client                         &client,
                                  const std::vector<std::string> &args) {
 	(void)client;
@@ -71,6 +100,12 @@ void CommandHandler::_handleNick(Client                         &client,
 	std::cout << "Executing NICK command with arg: " << args[0] << std::endl;
 }
 
+/**
+ * @brief Handles the USER command to register a user's details.
+ * @param client The client sending the command.
+ * @param args A vector of arguments containing username, hostname, servername,
+ * and realname.
+ */
 void CommandHandler::_handleUser(Client                         &client,
                                  const std::vector<std::string> &args) {
 	(void)client;
@@ -82,6 +117,12 @@ void CommandHandler::_handleUser(Client                         &client,
 	std::cout << "Executing USER command for user: " << args[0] << std::endl;
 }
 
+/**
+ * @brief Handles the PASS command to authenticate a client with the server
+ * password.
+ * @param client The client sending the command.
+ * @param args A vector of arguments containing the password.
+ */
 void CommandHandler::_handlePass(Client                         &client,
                                  const std::vector<std::string> &args) {
 	(void)client;

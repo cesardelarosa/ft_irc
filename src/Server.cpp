@@ -7,13 +7,20 @@
 #include <unistd.h>
 #include <vector>
 
-// Constructor: Initializes server attributes.
+/**
+ * @brief Constructs a new Server object.
+ * @param port The port number for the server to listen on.
+ * @param password The password required for clients to connect.
+ */
 Server::Server(int port, std::string password)
     : _port(port), _password(password), _server_fd(-1), _commandHandler(this) {
 	std::cout << "Server created on port: " << this->_port << std::endl;
 }
 
-// Destructor: Cleans up resources.
+/**
+ * @brief Destroys the Server object.
+ * @details Cleans up all client objects and closes the main server socket.
+ */
 Server::~Server() {
 	for (std::map<int, Client *>::iterator it = this->_clients.begin();
 	     it != this->_clients.end(); ++it) {
@@ -24,13 +31,38 @@ Server::~Server() {
 	}
 }
 
-// Orchestrates the server startup.
+/**
+ * @brief Starts the server's execution.
+ * @details This is the main entry point after server creation. It sets up the
+ * listening socket and enters the main event loop.
+ */
 void Server::start() {
 	_setupServerSocket();
 	_runEventLoop();
 }
 
-// Sets up the server socket.
+/**
+ * @brief Sends a reply message to a specific client.
+ * @details The message is appended with a "\r\n" sequence before being sent.
+ * @param client The client to whom the reply should be sent.
+ * @param message The content of the message to send.
+ */
+void Server::sendReply(const Client &client, const std::string &message) {
+	std::string final_message = message + "\r\n";
+	if (send(client.getFd(), final_message.c_str(), final_message.length(), 0) <
+	    0) {
+		std::cerr << "Error sending reply to client " << client.getFd()
+		          << std::endl;
+	}
+}
+
+/**
+ * @brief Sets up the main server listening socket.
+ * @details Configures the socket, sets it to non-blocking, binds it to the
+ * specified port, and starts listening for connections.
+ * @throw std::runtime_error if any of the socket operations (socket,
+ * setsockopt, fcntl, bind, listen) fail.
+ */
 void Server::_setupServerSocket() {
 	sockaddr_in address;
 	int         opt = 1;
@@ -62,7 +94,12 @@ void Server::_setupServerSocket() {
 	this->_fds.push_back(server_poll_fd);
 }
 
-// Runs the main server event loop.
+/**
+ * @brief Runs the main event loop for the server.
+ * @details Uses poll() to monitor all active sockets (server and clients) for
+ * incoming data or new connections.
+ * @throw std::runtime_error if poll() fails.
+ */
 void Server::_runEventLoop() {
 	std::cout << "Server is listening on port " << this->_port << "..."
 	          << std::endl;
@@ -81,7 +118,11 @@ void Server::_runEventLoop() {
 	}
 }
 
-// Handles a new client connection.
+/**
+ * @brief Handles a new client connection request.
+ * @details Accepts the connection, sets the new client socket to non-blocking,
+ * and adds the client to the server's management structures.
+ */
 void Server::_handleNewConnection() {
 	int client_fd = accept(this->_server_fd, NULL, NULL);
 	if (client_fd == -1) {
@@ -106,7 +147,14 @@ void Server::_handleNewConnection() {
 	          << std::endl;
 }
 
-// Handles data received from a client.
+/**
+ * @brief Handles incoming data from an existing client.
+ * @details Reads data from the socket. If the read is successful, the data is
+ * added to the client's buffer and processed. If the client disconnected, they
+ * are removed.
+ * @param client_idx The index of the client in the server's file descriptor
+ * list.
+ */
 void Server::_handleClientData(size_t client_idx) {
 	char buffer[512];
 	int  client_fd = this->_fds[client_idx].fd;
@@ -131,7 +179,12 @@ void Server::_handleClientData(size_t client_idx) {
 	}
 }
 
-// Processes the buffer of a client, looking for "/r/n" delimiter.
+/**
+ * @brief Processes the command buffer for a client.
+ * @details Scans the client's buffer for command lines delimited by "\r\n",
+ * extracting and dispatching each one to the CommandHandler.
+ * @param client The client whose buffer needs to be processed.
+ */
 void Server::_processClientCommands(Client &client) {
 	std::string &buffer = client.getBuffer();
 	size_t       pos = 0;
@@ -147,7 +200,13 @@ void Server::_processClientCommands(Client &client) {
 	}
 }
 
-// Removes a client from all server data structures.
+/**
+ * @brief Removes a client from the server's management structures.
+ * @details Closes the client's socket, deallocates the Client object, and
+ * removes the client from the fd list and client map.
+ * @param client_idx The index of the client in the server's file descriptor
+ * list.
+ */
 void Server::_removeClient(size_t client_idx) {
 	int client_fd = this->_fds[client_idx].fd;
 
@@ -158,13 +217,4 @@ void Server::_removeClient(size_t client_idx) {
 	this->_fds.erase(this->_fds.begin() + client_idx);
 
 	std::cout << "Client " << client_fd << " removed." << std::endl;
-}
-
-void Server::sendReply(const Client &client, const std::string &message) {
-	std::string final_message = message + "\r\n";
-	if (send(client.getFd(), final_message.c_str(), final_message.length(), 0) <
-	    0) {
-		std::cerr << "Error sending reply to client " << client.getFd()
-		          << std::endl;
-	}
 }
