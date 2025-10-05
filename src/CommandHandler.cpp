@@ -1,5 +1,5 @@
 #include "CommandHandler.hpp"
-#include "Replies.hpp" // <-- Añadido
+#include "Replies.hpp"
 #include "Server.hpp"
 #include <iostream>
 #include <sstream>
@@ -94,7 +94,7 @@ void CommandHandler::_handleNick(Client                         &client,
 		return;
 	}
 
-	// NOTA: Aquí deberías añadir la lógica para comprobar si el nick ya existe.
+	// NOTA: añadir la lógica para comprobar si el nick ya existe.
 	client.setNickname(args[0]);
 	std::cout << "Executing NICK command with arg: " << args[0] << std::endl;
 }
@@ -111,7 +111,7 @@ void CommandHandler::_handleUser(Client                         &client,
 		_server->sendReply(client, ERR_NEEDMOREPARAMS("USER"));
 		return;
 	}
-	// NOTA: Aquí deberías comprobar si el usuario ya está registrado.
+	// NOTA: comprobar si el usuario ya está registrado.
 	client.setUsername(args[0]);
 	std::cout << "Executing USER command for user: " << args[0] << std::endl;
 }
@@ -134,9 +134,8 @@ void CommandHandler::_handlePass(Client                         &client,
 		return;
 	}
 
-	// NOTA: Aquí deberías comparar args[0] con la contraseña real del servidor.
+	// NOTA: comparar args[0] con la contraseña real del servidor.
 	// Esta es una implementación simplificada.
 	std::cout << "Executing PASS command." << std::endl;
-	client.setAuthenticated(true); // Marcar como autenticado si la pass es
-	                               // correcta
+	client.setAuthenticated(true);
 }
