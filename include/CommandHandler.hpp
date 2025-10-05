@@ -22,11 +22,11 @@ class CommandHandler {
 	Server *_server;
 
 	typedef void (CommandHandler::*CommandFunction)(
-		Client &client, const std::vector<std::string> &args);
+	    Client &client, const std::vector<std::string> &args);
 
 	std::map<std::string, CommandFunction> _commands;
 
-	void	_parseAndExecute(Client &client, const std::string &raw_command);
+	void _parseAndExecute(Client &client, const std::string &raw_command);
 
 	void _handleNick(Client &client, const std::vector<std::string> &args);
 	void _handleUser(Client &client, const std::vector<std::string> &args);
