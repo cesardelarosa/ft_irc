@@ -13,13 +13,13 @@ class Client {
 	void         addToBuffer(const char *data, int nbytes);
 	std::string &getBuffer();
 
-	void setNickname(const std::string &nick);
+	void               setNickname(const std::string &nick);
 	const std::string &getNickname() const;
-	void setUsername(const std::string &user);
+	void               setUsername(const std::string &user);
 	const std::string &getUsername() const;
-	void setAuthenticated(bool value);
-	bool isAuthenticated() const;
-	int  getFd() const;
+	void               setAuthenticated(bool value);
+	bool               isAuthenticated() const;
+	int                getFd() const;
 
   private:
 	int         _fd;

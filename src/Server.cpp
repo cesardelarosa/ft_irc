@@ -162,8 +162,8 @@ void Server::_removeClient(size_t client_idx) {
 
 void Server::sendReply(const Client &client, const std::string &message) {
 	std::string final_message = message + "\r\n";
-	if (send(client.getFd(), final_message.c_str(), final_message.length(),
-	         0) < 0) {
+	if (send(client.getFd(), final_message.c_str(), final_message.length(), 0) <
+	    0) {
 		std::cerr << "Error sending reply to client " << client.getFd()
 		          << std::endl;
 	}
