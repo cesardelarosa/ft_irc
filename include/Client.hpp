@@ -10,6 +10,9 @@ class Client {
 	Client(int fd);
 	~Client();
 
+	void         addToBuffer(const char *data, int nbytes);
+	std::string &getBuffer();
+
   private:
 	int         _fd;
 	std::string _buffer;
