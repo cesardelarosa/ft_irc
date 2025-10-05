@@ -149,9 +149,9 @@ void Server::_handleNewConnection() {
 
 /**
  * @brief Handles incoming data from an existing client.
- * @details Reads data from the socket. If the read is successful, the data is
- * added to the client's buffer and processed. If the client disconnected, they
- * are removed.
+ * @details Reads data from the socket, adds it to the client's buffer, and
+ * then processes any complete commands found in the buffer. If the client
+ * disconnected, they are removed.
  * @param client_idx The index of the client in the server's file descriptor
  * list.
  */
@@ -159,7 +159,7 @@ void Server::_handleClientData(size_t client_idx) {
 	char buffer[512];
 	int  client_fd = this->_fds[client_idx].fd;
 
-	int nbytes = recv(client_fd, buffer, sizeof(buffer), 0);
+	int nbytes = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
 
 	if (nbytes <= 0) {
 		if (nbytes == 0)
@@ -171,6 +171,7 @@ void Server::_handleClientData(size_t client_idx) {
 
 		_removeClient(client_idx);
 	} else {
+		buffer[nbytes] = '\0';
 		std::map<int, Client *>::iterator it = this->_clients.find(client_fd);
 		if (it != this->_clients.end()) {
 			it->second->addToBuffer(buffer, nbytes);
@@ -182,18 +183,22 @@ void Server::_handleClientData(size_t client_idx) {
 /**
  * @brief Processes the command buffer for a client.
  * @details Scans the client's buffer for command lines delimited by "\r\n",
- * extracting and dispatching each one to the CommandHandler.
+ * extracting and dispatching each one to the CommandHandler. Any partial
+ * command remains in the buffer for the next read.
  * @param client The client whose buffer needs to be processed.
  */
 void Server::_processClientCommands(Client &client) {
 	std::string &buffer = client.getBuffer();
 	size_t       pos = 0;
+
+	// Process all complete commands in the buffer
 	while ((pos = buffer.find("\r\n")) != std::string::npos) {
 		std::string command_line = buffer.substr(0, pos);
+		// Erase the command and the "\r\n" from the buffer
 		buffer.erase(0, pos + 2);
 
 		if (!command_line.empty()) {
-			std::cout << "Processing command: [" << command_line << "]"
+			std::cout << "Socket " << client.getFd() << " | C: " << command_line
 			          << std::endl;
 			this->_commandHandler.handleCommand(client, command_line);
 		}

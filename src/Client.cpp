@@ -1,9 +1,9 @@
-#include "Client.hpp"
-
 /**
  * @brief Constructs a new Client object.
  * @param fd The file descriptor of the client's socket.
  */
+#include "Client.hpp"
+
 Client::Client(int fd) : _fd(fd), _is_authenticated(false) {
 }
 

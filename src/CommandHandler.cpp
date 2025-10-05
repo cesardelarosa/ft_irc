@@ -1,4 +1,5 @@
 #include "CommandHandler.hpp"
+#include "Replies.hpp" // <-- Añadido
 #include "Server.hpp"
 #include <iostream>
 #include <sstream>
@@ -47,9 +48,7 @@ void CommandHandler::_parseAndExecute(Client            &client,
 	// 1. Find trailing argument (prefixed with ' :')
 	size_t colon_pos = line.find(" :");
 	if (colon_pos != std::string::npos) {
-		// The trailing part is everything after the " :"
 		args.push_back(line.substr(colon_pos + 2));
-		// The rest of the line is processed for command and normal args
 		line.erase(colon_pos);
 	}
 
@@ -62,12 +61,11 @@ void CommandHandler::_parseAndExecute(Client            &client,
 	}
 
 	if (tokens.empty()) {
-		return; // Empty or whitespace-only command line
+		return;
 	}
 
 	// 3. Separate command and arguments
 	std::string command = tokens[0];
-	// Insert the non-trailing args at the beginning of the args vector
 	if (tokens.size() > 1) {
 		args.insert(args.begin(), tokens.begin() + 1, tokens.end());
 	}
@@ -79,8 +77,7 @@ void CommandHandler::_parseAndExecute(Client            &client,
 	if (it != this->_commands.end()) {
 		(this->*(it->second))(client, args);
 	} else {
-		std::cout << "Unknown command: " << command << std::endl;
-		// Here you would typically send a numeric reply like ERR_UNKNOWNCOMMAND
+		_server->sendReply(client, ERR_UNKNOWNCOMMAND(command));
 	}
 }
 
@@ -92,11 +89,13 @@ void CommandHandler::_parseAndExecute(Client            &client,
  */
 void CommandHandler::_handleNick(Client                         &client,
                                  const std::vector<std::string> &args) {
-	(void)client;
 	if (args.empty()) {
-		std::cout << "NICK command received with no arguments." << std::endl;
+		_server->sendReply(client, ERR_NONICKNAMEGIVEN);
 		return;
 	}
+
+	// NOTA: Aquí deberías añadir la lógica para comprobar si el nick ya existe.
+	client.setNickname(args[0]);
 	std::cout << "Executing NICK command with arg: " << args[0] << std::endl;
 }
 
@@ -108,12 +107,12 @@ void CommandHandler::_handleNick(Client                         &client,
  */
 void CommandHandler::_handleUser(Client                         &client,
                                  const std::vector<std::string> &args) {
-	(void)client;
 	if (args.size() < 4) {
-		std::cout << "USER command received with insufficient arguments."
-		          << std::endl;
+		_server->sendReply(client, ERR_NEEDMOREPARAMS("USER"));
 		return;
 	}
+	// NOTA: Aquí deberías comprobar si el usuario ya está registrado.
+	client.setUsername(args[0]);
 	std::cout << "Executing USER command for user: " << args[0] << std::endl;
 }
 
@@ -125,10 +124,19 @@ void CommandHandler::_handleUser(Client                         &client,
  */
 void CommandHandler::_handlePass(Client                         &client,
                                  const std::vector<std::string> &args) {
-	(void)client;
-	if (args.empty()) {
-		std::cout << "PASS command received with no arguments." << std::endl;
+	if (client.isAuthenticated()) {
+		_server->sendReply(client, ERR_ALREADYREGISTRED);
 		return;
 	}
+
+	if (args.empty()) {
+		_server->sendReply(client, ERR_NEEDMOREPARAMS("PASS"));
+		return;
+	}
+
+	// NOTA: Aquí deberías comparar args[0] con la contraseña real del servidor.
+	// Esta es una implementación simplificada.
 	std::cout << "Executing PASS command." << std::endl;
+	client.setAuthenticated(true); // Marcar como autenticado si la pass es
+	                               // correcta
 }
