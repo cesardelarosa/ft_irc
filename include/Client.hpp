@@ -17,9 +17,20 @@ class Client {
 	const std::string &getNickname() const;
 	void               setUsername(const std::string &user);
 	const std::string &getUsername() const;
-	void               setAuthenticated(bool value);
-	bool               isAuthenticated() const;
+	void               setRealname(const std::string &name);
+	const std::string &getRealname() const;
 	int                getFd() const;
+
+	// Registration state
+	void setHasPass(bool value);
+	bool hasPass() const;
+	bool hasNick() const;
+	bool hasUser() const;
+	void setRegistered(bool value);
+	bool isRegistered() const;
+
+	// Prefix for IRC messages
+	std::string getPrefix() const;
 
   private:
 	int         _fd;
@@ -27,7 +38,9 @@ class Client {
 
 	std::string _nickname;
 	std::string _username;
-	bool        _is_authenticated;
+	std::string _realname;
+	bool        _has_pass;
+	bool        _is_registered;
 
 	Client();
 	Client(Client const &src);

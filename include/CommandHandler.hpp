@@ -27,10 +27,18 @@ class CommandHandler {
 	std::map<std::string, CommandFunction> _commands;
 
 	void _parseAndExecute(Client &client, const std::string &raw_command);
+	void _tryRegister(Client &client);
 
+	// Registration commands
+	void _handlePass(Client &client, const std::vector<std::string> &args);
 	void _handleNick(Client &client, const std::vector<std::string> &args);
 	void _handleUser(Client &client, const std::vector<std::string> &args);
-	void _handlePass(Client &client, const std::vector<std::string> &args);
+
+	// Channel commands
+	void _handleJoin(Client &client, const std::vector<std::string> &args);
+	void _handlePart(Client &client, const std::vector<std::string> &args);
+	void _handlePrivmsg(Client &client, const std::vector<std::string> &args);
+	void _handleQuit(Client &client, const std::vector<std::string> &args);
 
 	CommandHandler();
 	CommandHandler(CommandHandler const &src);

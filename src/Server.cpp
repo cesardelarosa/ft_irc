@@ -19,11 +19,17 @@ Server::Server(int port, std::string password)
 
 /**
  * @brief Destroys the Server object.
- * @details Cleans up all client objects and closes the main server socket.
+ * @details Cleans up all client objects, all channel objects, and closes the
+ * main server socket.
  */
 Server::~Server() {
 	for (std::map<int, Client *>::iterator it = this->_clients.begin();
 	     it != this->_clients.end(); ++it) {
+		delete it->second;
+	}
+	for (std::map<std::string, Channel *>::iterator it =
+	         this->_channels.begin();
+	     it != this->_channels.end(); ++it) {
 		delete it->second;
 	}
 	if (this->_server_fd != -1) {
@@ -33,8 +39,6 @@ Server::~Server() {
 
 /**
  * @brief Starts the server's execution.
- * @details This is the main entry point after server creation. It sets up the
- * listening socket and enters the main event loop.
  */
 void Server::start() {
 	_setupServerSocket();
@@ -43,12 +47,14 @@ void Server::start() {
 
 /**
  * @brief Sends a reply message to a specific client.
- * @details The message is appended with a "\r\n" sequence before being sent.
+ * @details The message is prefixed with the server name and appended with
+ * "\\r\\n".
  * @param client The client to whom the reply should be sent.
  * @param message The content of the message to send.
  */
 void Server::sendReply(const Client &client, const std::string &message) {
-	std::string final_message = message + "\r\n";
+	std::string final_message =
+	    ":" + std::string("ircserv") + " " + message + "\r\n";
 	if (send(client.getFd(), final_message.c_str(), final_message.length(), 0) <
 	    0) {
 		std::cerr << "Error sending reply to client " << client.getFd()
@@ -56,12 +62,100 @@ void Server::sendReply(const Client &client, const std::string &message) {
 	}
 }
 
+// ──────────────────────────── Accessors ─────────────────────────
+
+const std::string &Server::getPassword() const {
+	return this->_password;
+}
+
+std::map<int, Client *> &Server::getClients() {
+	return this->_clients;
+}
+
+/**
+ * @brief Finds a client by their nickname.
+ * @param nick The nickname to search for.
+ * @return Pointer to the Client, or NULL if not found.
+ */
+Client *Server::getClientByNickname(const std::string &nick) {
+	for (std::map<int, Client *>::iterator it = this->_clients.begin();
+	     it != this->_clients.end(); ++it) {
+		if (it->second->getNickname() == nick) {
+			return it->second;
+		}
+	}
+	return NULL;
+}
+
+/**
+ * @brief Gets a channel by its name.
+ * @param name The name of the channel.
+ * @return Pointer to the Channel, or NULL if not found.
+ */
+Channel *Server::getChannel(const std::string &name) {
+	std::map<std::string, Channel *>::iterator it = this->_channels.find(name);
+	if (it != this->_channels.end()) {
+		return it->second;
+	}
+	return NULL;
+}
+
+/**
+ * @brief Creates a new channel with the given name.
+ * @param name The name of the new channel.
+ * @return Pointer to the newly created Channel.
+ */
+Channel *Server::createChannel(const std::string &name) {
+	Channel *channel = new Channel(name);
+	this->_channels.insert(std::make_pair(name, channel));
+	return channel;
+}
+
+/**
+ * @brief Removes a channel and deallocates its memory.
+ * @param name The name of the channel to remove.
+ */
+void Server::removeChannel(const std::string &name) {
+	std::map<std::string, Channel *>::iterator it = this->_channels.find(name);
+	if (it != this->_channels.end()) {
+		delete it->second;
+		this->_channels.erase(it);
+	}
+}
+
+/**
+ * @brief Removes a client from all channels they are in.
+ * @details Also cleans up empty channels after the client leaves.
+ * @param client The client to remove from all channels.
+ */
+void Server::removeClientFromAllChannels(Client *client) {
+	std::vector<std::string> empty_channels;
+
+	for (std::map<std::string, Channel *>::iterator it =
+	         this->_channels.begin();
+	     it != this->_channels.end(); ++it) {
+		if (it->second->isMember(client)) {
+			// Broadcast QUIT to all channel members
+			it->second->broadcastMessage(
+			    ":" + client->getPrefix() + " QUIT :Client quit", client);
+			it->second->removeMember(client);
+			if (it->second->isEmpty()) {
+				empty_channels.push_back(it->first);
+			}
+		}
+	}
+
+	// Remove empty channels
+	for (size_t i = 0; i < empty_channels.size(); ++i) {
+		removeChannel(empty_channels[i]);
+	}
+}
+
+// ──────────────────────────── Network ───────────────────────────
+
 /**
  * @brief Sets up the main server listening socket.
- * @details Configures the socket, sets it to non-blocking, binds it to the
- * specified port, and starts listening for connections.
- * @throw std::runtime_error if any of the socket operations (socket,
- * setsockopt, fcntl, bind, listen) fail.
+ * @throw std::runtime_error if any socket operation fails.
  */
 void Server::_setupServerSocket() {
 	sockaddr_in address;
@@ -96,8 +190,6 @@ void Server::_setupServerSocket() {
 
 /**
  * @brief Runs the main event loop for the server.
- * @details Uses poll() to monitor all active sockets (server and clients) for
- * incoming data or new connections.
  * @throw std::runtime_error if poll() fails.
  */
 void Server::_runEventLoop() {
@@ -120,8 +212,6 @@ void Server::_runEventLoop() {
 
 /**
  * @brief Handles a new client connection request.
- * @details Accepts the connection, sets the new client socket to non-blocking,
- * and adds the client to the server's management structures.
  */
 void Server::_handleNewConnection() {
 	int client_fd = accept(this->_server_fd, NULL, NULL);
@@ -149,11 +239,7 @@ void Server::_handleNewConnection() {
 
 /**
  * @brief Handles incoming data from an existing client.
- * @details Reads data from the socket, adds it to the client's buffer, and
- * then processes any complete commands found in the buffer. If the client
- * disconnected, they are removed.
- * @param client_idx The index of the client in the server's file descriptor
- * list.
+ * @param client_idx The index in the _fds vector.
  */
 void Server::_handleClientData(size_t client_idx) {
 	char buffer[512];
@@ -182,19 +268,14 @@ void Server::_handleClientData(size_t client_idx) {
 
 /**
  * @brief Processes the command buffer for a client.
- * @details Scans the client's buffer for command lines delimited by "\r\n",
- * extracting and dispatching each one to the CommandHandler. Any partial
- * command remains in the buffer for the next read.
  * @param client The client whose buffer needs to be processed.
  */
 void Server::_processClientCommands(Client &client) {
 	std::string &buffer = client.getBuffer();
 	size_t       pos = 0;
 
-	// Process all complete commands in the buffer
 	while ((pos = buffer.find("\r\n")) != std::string::npos) {
 		std::string command_line = buffer.substr(0, pos);
-		// Erase the command and the "\r\n" from the buffer
 		buffer.erase(0, pos + 2);
 
 		if (!command_line.empty()) {
@@ -206,14 +287,18 @@ void Server::_processClientCommands(Client &client) {
 }
 
 /**
- * @brief Removes a client from the server's management structures.
- * @details Closes the client's socket, deallocates the Client object, and
- * removes the client from the fd list and client map.
- * @param client_idx The index of the client in the server's file descriptor
- * list.
+ * @brief Removes a client from the server.
+ * @details Cleans up channels, closes socket, and deallocates client.
+ * @param client_idx The index in the _fds vector.
  */
 void Server::_removeClient(size_t client_idx) {
 	int client_fd = this->_fds[client_idx].fd;
+
+	// Remove client from all channels first
+	std::map<int, Client *>::iterator it = this->_clients.find(client_fd);
+	if (it != this->_clients.end()) {
+		removeClientFromAllChannels(it->second);
+	}
 
 	delete this->_clients[client_fd];
 	this->_clients.erase(client_fd);

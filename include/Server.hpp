@@ -19,13 +19,23 @@ class Server {
 	void start();
 	void sendReply(const Client &client, const std::string &message);
 
+	// Accessors for CommandHandler to use
+	const std::string       &getPassword() const;
+	std::map<int, Client *> &getClients();
+	Client                  *getClientByNickname(const std::string &nick);
+	Channel                 *getChannel(const std::string &name);
+	Channel                 *createChannel(const std::string &name);
+	void                     removeChannel(const std::string &name);
+	void                     removeClientFromAllChannels(Client *client);
+
   private:
-	int                        _port;
-	std::string                _password;
-	int                        _server_fd;
-	std::vector<struct pollfd> _fds;
-	std::map<int, Client *>    _clients;
-	CommandHandler             _commandHandler;
+	int                              _port;
+	std::string                      _password;
+	int                              _server_fd;
+	std::vector<struct pollfd>       _fds;
+	std::map<int, Client *>          _clients;
+	std::map<std::string, Channel *> _channels;
+	CommandHandler                   _commandHandler;
 
 	void _setupServerSocket();
 	void _runEventLoop();

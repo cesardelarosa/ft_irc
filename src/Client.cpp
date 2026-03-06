@@ -1,10 +1,10 @@
+#include "Client.hpp"
+
 /**
  * @brief Constructs a new Client object.
  * @param fd The file descriptor of the client's socket.
  */
-#include "Client.hpp"
-
-Client::Client(int fd) : _fd(fd), _is_authenticated(false) {
+Client::Client(int fd) : _fd(fd), _has_pass(false), _is_registered(false) {
 }
 
 /**
@@ -30,58 +30,62 @@ std::string &Client::getBuffer() {
 	return this->_buffer;
 }
 
-/**
- * @brief Sets the nickname for the client.
- * @param nick The new nickname.
- */
 void Client::setNickname(const std::string &nick) {
 	this->_nickname = nick;
 }
 
-/**
- * @brief Gets the nickname of the client.
- * @return A const reference to the nickname string.
- */
 const std::string &Client::getNickname() const {
 	return this->_nickname;
 }
 
-/**
- * @brief Sets the username for the client.
- * @param user The new username.
- */
 void Client::setUsername(const std::string &user) {
 	this->_username = user;
 }
 
-/**
- * @brief Gets the username of the client.
- * @return A const reference to the username string.
- */
 const std::string &Client::getUsername() const {
 	return this->_username;
 }
 
-/**
- * @brief Sets the authentication status of the client.
- * @param value The new authentication status (true or false).
- */
-void Client::setAuthenticated(bool value) {
-	this->_is_authenticated = value;
+void Client::setRealname(const std::string &name) {
+	this->_realname = name;
 }
 
-/**
- * @brief Checks if the client is authenticated.
- * @return True if the client is authenticated, false otherwise.
- */
-bool Client::isAuthenticated() const {
-	return this->_is_authenticated;
+const std::string &Client::getRealname() const {
+	return this->_realname;
 }
 
-/**
- * @brief Gets the file descriptor of the client.
- * @return The client's file descriptor.
- */
 int Client::getFd() const {
 	return this->_fd;
+}
+
+void Client::setHasPass(bool value) {
+	this->_has_pass = value;
+}
+
+bool Client::hasPass() const {
+	return this->_has_pass;
+}
+
+bool Client::hasNick() const {
+	return !this->_nickname.empty();
+}
+
+bool Client::hasUser() const {
+	return !this->_username.empty();
+}
+
+void Client::setRegistered(bool value) {
+	this->_is_registered = value;
+}
+
+bool Client::isRegistered() const {
+	return this->_is_registered;
+}
+
+/**
+ * @brief Returns the IRC prefix string for this client.
+ * @details Format: nick!user@host
+ */
+std::string Client::getPrefix() const {
+	return this->_nickname + "!" + this->_username + "@localhost";
 }
