@@ -1,12 +1,45 @@
 #include "Server.hpp"
+#include <csignal>
 #include <cstdlib>
 #include <iostream>
-#include <stdexcept>
+
+volatile sig_atomic_t g_shutdown = 0;
+
+/**
+ * @brief Signal handler for SIGINT and SIGTERM.
+ * @details Sets the global shutdown flag for a clean exit from the event loop.
+ */
+static void signalHandler(int signum) {
+	(void)signum;
+	g_shutdown = 1;
+}
+
+/**
+ * @brief Configures signal handling for the server process.
+ * @details Uses sigaction to handle SIGINT/SIGTERM (clean shutdown)
+ *          and to ignore SIGPIPE (prevents crash on send to closed socket).
+ */
+static void setupSignals() {
+	struct sigaction sa;
+	sigemptyset(&sa.sa_mask);
+	sigaddset(&sa.sa_mask, SIGINT);
+	sigaddset(&sa.sa_mask, SIGTERM);
+	sa.sa_handler = signalHandler;
+	sa.sa_flags = 0;
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
+
+	struct sigaction sa_pipe;
+	sigemptyset(&sa_pipe.sa_mask);
+	sa_pipe.sa_handler = SIG_IGN;
+	sa_pipe.sa_flags = 0;
+	sigaction(SIGPIPE, &sa_pipe, NULL);
+}
 
 /**
  * @brief The main entry point for the IRC server executable.
- * @details Parses command-line arguments, validates them, and starts the
- * server.
+ * @details Parses command-line arguments, validates them, sets up signal
+ * handling, and starts the server.
  * @param argc The number of command-line arguments.
  * @param argv An array of command-line argument strings. Expected: <port>
  * <password>.
@@ -26,6 +59,8 @@ int main(int argc, char **argv) {
 	}
 
 	std::string password = argv[2];
+
+	setupSignals();
 
 	try {
 		Server server(port, password);

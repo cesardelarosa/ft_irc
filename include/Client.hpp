@@ -19,6 +19,8 @@ class Client {
 	const std::string &getUsername() const;
 	void               setRealname(const std::string &name);
 	const std::string &getRealname() const;
+	void               setHostname(const std::string &host);
+	const std::string &getHostname() const;
 	int                getFd() const;
 
 	// Registration state
@@ -39,6 +41,7 @@ class Client {
 	std::string _nickname;
 	std::string _username;
 	std::string _realname;
+	std::string _hostname;
 	bool        _has_pass;
 	bool        _is_registered;
 

@@ -112,8 +112,9 @@ void CommandHandler::_tryRegister(Client &client) {
 		return;
 
 	client.setRegistered(true);
-	_server->sendReply(client, RPL_WELCOME(client.getNickname(),
-	                                       client.getUsername(), "localhost"));
+	_server->sendReply(client,
+	                   RPL_WELCOME(client.getNickname(), client.getUsername(),
+	                               client.getHostname()));
 	std::cout << "Client " << client.getFd() << " registered as "
 	          << client.getNickname() << std::endl;
 }

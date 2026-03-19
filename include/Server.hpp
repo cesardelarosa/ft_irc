@@ -6,10 +6,13 @@
 #include "Channel.hpp"
 #include "Client.hpp"
 #include "CommandHandler.hpp"
+#include <csignal>
 #include <map>
 #include <poll.h>
 #include <string>
 #include <vector>
+
+extern volatile sig_atomic_t g_shutdown;
 
 class Server {
   public:

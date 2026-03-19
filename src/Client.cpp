@@ -54,6 +54,14 @@ const std::string &Client::getRealname() const {
 	return this->_realname;
 }
 
+void Client::setHostname(const std::string &host) {
+	this->_hostname = host;
+}
+
+const std::string &Client::getHostname() const {
+	return this->_hostname;
+}
+
 int Client::getFd() const {
 	return this->_fd;
 }
@@ -87,5 +95,6 @@ bool Client::isRegistered() const {
  * @details Format: nick!user@host
  */
 std::string Client::getPrefix() const {
-	return this->_nickname + "!" + this->_username + "@localhost";
+	std::string host = this->_hostname.empty() ? "localhost" : this->_hostname;
+	return this->_nickname + "!" + this->_username + "@" + host;
 }

@@ -1,7 +1,11 @@
 #include "Server.hpp"
+#include <arpa/inet.h>
+#include <cerrno>
+#include <cstring>
 #include <fcntl.h>
 #include <iostream>
-#include <netinet/in.h>
+#include <netdb.h>
+#include <sstream>
 #include <stdexcept>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -155,29 +159,51 @@ void Server::removeClientFromAllChannels(Client *client) {
 
 /**
  * @brief Sets up the main server listening socket.
+ * @details Uses getaddrinfo for portable address resolution.
  * @throw std::runtime_error if any socket operation fails.
  */
 void Server::_setupServerSocket() {
-	sockaddr_in address;
-	int         opt = 1;
+	struct addrinfo hints, *res;
+	int             opt = 1;
 
-	this->_server_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (this->_server_fd == -1)
+	std::memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE;
+
+	std::stringstream ss;
+	ss << this->_port;
+	std::string port_str = ss.str();
+
+	int status = getaddrinfo(NULL, port_str.c_str(), &hints, &res);
+	if (status != 0)
+		throw std::runtime_error(std::string("getaddrinfo: ") +
+		                         gai_strerror(status));
+
+	this->_server_fd =
+	    socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+	if (this->_server_fd == -1) {
+		freeaddrinfo(res);
 		throw std::runtime_error("Failed to create socket.");
+	}
 
 	if (setsockopt(this->_server_fd, SOL_SOCKET, SO_REUSEADDR, &opt,
-	               sizeof(opt)) == -1)
+	               sizeof(opt)) == -1) {
+		freeaddrinfo(res);
 		throw std::runtime_error("Failed to set socket options.");
+	}
 
-	if (fcntl(this->_server_fd, F_SETFL, O_NONBLOCK) == -1)
+	if (fcntl(this->_server_fd, F_SETFL, O_NONBLOCK) == -1) {
+		freeaddrinfo(res);
 		throw std::runtime_error("Failed to set socket to non-blocking.");
+	}
 
-	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = INADDR_ANY;
-	address.sin_port = htons(this->_port);
-	if (bind(this->_server_fd, (struct sockaddr *)&address, sizeof(address)) ==
-	    -1)
+	if (bind(this->_server_fd, res->ai_addr, res->ai_addrlen) == -1) {
+		freeaddrinfo(res);
 		throw std::runtime_error("Failed to bind to port.");
+	}
+
+	freeaddrinfo(res);
 
 	if (listen(this->_server_fd, 10) == -1)
 		throw std::runtime_error("Failed to listen on socket.");
@@ -190,15 +216,19 @@ void Server::_setupServerSocket() {
 
 /**
  * @brief Runs the main event loop for the server.
- * @throw std::runtime_error if poll() fails.
+ * @details Exits cleanly when g_shutdown is set (via SIGINT/SIGTERM).
+ * @throw std::runtime_error if poll() fails for reasons other than a signal.
  */
 void Server::_runEventLoop() {
 	std::cout << "Server is listening on port " << this->_port << "..."
 	          << std::endl;
 
-	while (true) {
-		if (poll(this->_fds.data(), this->_fds.size(), -1) == -1)
+	while (!g_shutdown) {
+		if (poll(this->_fds.data(), this->_fds.size(), -1) == -1) {
+			if (errno == EINTR)
+				break;
 			throw std::runtime_error("poll() failed.");
+		}
 
 		if (this->_fds[0].revents & POLLIN)
 			_handleNewConnection();
@@ -208,13 +238,19 @@ void Server::_runEventLoop() {
 				_handleClientData(i);
 		}
 	}
+
+	std::cout << "\nServer shutting down gracefully." << std::endl;
 }
 
 /**
  * @brief Handles a new client connection request.
  */
 void Server::_handleNewConnection() {
-	int client_fd = accept(this->_server_fd, NULL, NULL);
+	struct sockaddr_storage client_addr;
+	socklen_t               addr_len = sizeof(client_addr);
+
+	int client_fd =
+	    accept(this->_server_fd, (struct sockaddr *)&client_addr, &addr_len);
 	if (client_fd == -1) {
 		std::cerr << "Warning: accept() failed." << std::endl;
 		return;
@@ -226,15 +262,27 @@ void Server::_handleNewConnection() {
 		return;
 	}
 
+	// Resolve client IP address using inet_ntop
+	char ip_str[INET6_ADDRSTRLEN];
+	if (client_addr.ss_family == AF_INET) {
+		struct sockaddr_in *s = (struct sockaddr_in *)&client_addr;
+		inet_ntop(AF_INET, &s->sin_addr, ip_str, sizeof(ip_str));
+	} else {
+		struct sockaddr_in6 *s = (struct sockaddr_in6 *)&client_addr;
+		inet_ntop(AF_INET6, &s->sin6_addr, ip_str, sizeof(ip_str));
+	}
+
 	struct pollfd client_poll_fd;
 	client_poll_fd.fd = client_fd;
 	client_poll_fd.events = POLLIN;
 	this->_fds.push_back(client_poll_fd);
 
-	this->_clients.insert(std::make_pair(client_fd, new Client(client_fd)));
+	Client *new_client = new Client(client_fd);
+	new_client->setHostname(ip_str);
+	this->_clients.insert(std::make_pair(client_fd, new_client));
 
 	std::cout << "New connection accepted. Client fd: " << client_fd
-	          << std::endl;
+	          << " IP: " << ip_str << std::endl;
 }
 
 /**
