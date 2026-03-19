@@ -2,6 +2,7 @@
 #include "Channel.hpp"
 #include "Replies.hpp"
 #include "Server.hpp"
+#include "Utils.hpp"
 #include <iostream>
 #include <sstream>
 #include <sys/socket.h>
@@ -66,8 +67,8 @@ void CommandHandler::_parseAndExecute(Client            &client,
 		return;
 	}
 
-	// 3. Separate command and arguments
-	std::string              command = tokens[0];
+	// 3. Separate command and arguments (commands are case-insensitive)
+	std::string              command = toUpper(tokens[0]);
 	std::vector<std::string> args;
 	if (tokens.size() > 1) {
 		args.insert(args.begin(), tokens.begin() + 1, tokens.end());
@@ -115,8 +116,9 @@ void CommandHandler::_tryRegister(Client &client) {
 	_server->sendReply(client,
 	                   RPL_WELCOME(client.getNickname(), client.getUsername(),
 	                               client.getHostname()));
-	std::cout << "Client " << client.getFd() << " registered as "
-	          << client.getNickname() << std::endl;
+	std::cout << LOG_SERVER << LOG_NICK << client.getNickname() << LOG_R
+	          << " registered " << ANSI_DIM << "(fd " << client.getFd() << ")"
+	          << LOG_R << std::endl;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -139,8 +141,8 @@ void CommandHandler::_handlePass(Client                         &client,
 	}
 
 	client.setHasPass(true);
-	std::cout << "Client " << client.getFd() << " passed authentication."
-	          << std::endl;
+	std::cout << LOG_SERVER << ANSI_DIM << "fd " << client.getFd()
+	          << " passed auth" << LOG_R << std::endl;
 	_tryRegister(client);
 }
 
@@ -208,8 +210,8 @@ void CommandHandler::_handleNick(Client                         &client,
 		_tryRegister(client);
 	}
 
-	std::cout << "Client " << client.getFd() << " nick set to: " << nick
-	          << std::endl;
+	std::cout << LOG_SERVER << ANSI_DIM << "fd " << client.getFd() << LOG_R
+	          << " nick -> " << LOG_NICK << nick << LOG_R << std::endl;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -231,7 +233,8 @@ void CommandHandler::_handleUser(Client                         &client,
 	// args[3] is the realname (trailing argument)
 	client.setRealname(args[3]);
 
-	std::cout << "Client " << client.getFd() << " user set to: " << args[0]
+	std::cout << LOG_SERVER << ANSI_DIM << "fd " << client.getFd() << LOG_R
+	          << " user -> " << ANSI_BRIGHT_CYAN << args[0] << LOG_R
 	          << std::endl;
 	_tryRegister(client);
 }
@@ -442,8 +445,8 @@ void CommandHandler::_handleQuit(Client                         &client,
                                  const std::vector<std::string> &args) {
 	std::string reason = args.empty() ? "Client quit" : args[0];
 
-	std::cout << "Client " << client.getFd() << " quit: " << reason
-	          << std::endl;
+	std::cout << LOG_DISCONNECT << LOG_NICK << client.getNickname() << LOG_R
+	          << " quit: " << ANSI_DIM << reason << LOG_R << std::endl;
 
 	// The actual cleanup (removing from channels, closing socket) is handled
 	// by Server::_removeClient, which is called when recv() returns 0 after

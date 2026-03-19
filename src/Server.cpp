@@ -1,4 +1,5 @@
 #include "Server.hpp"
+#include "Utils.hpp"
 #include <arpa/inet.h>
 #include <cerrno>
 #include <cstring>
@@ -18,7 +19,8 @@
  */
 Server::Server(int port, std::string password)
     : _port(port), _password(password), _server_fd(-1), _commandHandler(this) {
-	std::cout << "Server created on port: " << this->_port << std::endl;
+	std::cout << LOG_SERVER << "Server created on port: " << ANSI_BOLD
+	          << this->_port << LOG_R << std::endl;
 }
 
 /**
@@ -61,8 +63,8 @@ void Server::sendReply(const Client &client, const std::string &message) {
 	    ":" + std::string("ircserv") + " " + message + "\r\n";
 	if (send(client.getFd(), final_message.c_str(), final_message.length(), 0) <
 	    0) {
-		std::cerr << "Error sending reply to client " << client.getFd()
-		          << std::endl;
+		std::cerr << LOG_ERROR << "send() failed for fd " << LOG_FD
+		          << client.getFd() << LOG_R << std::endl;
 	}
 }
 
@@ -82,9 +84,10 @@ std::map<int, Client *> &Server::getClients() {
  * @return Pointer to the Client, or NULL if not found.
  */
 Client *Server::getClientByNickname(const std::string &nick) {
+	std::string lower_nick = toIrcLower(nick);
 	for (std::map<int, Client *>::iterator it = this->_clients.begin();
 	     it != this->_clients.end(); ++it) {
-		if (it->second->getNickname() == nick) {
+		if (toIrcLower(it->second->getNickname()) == lower_nick) {
 			return it->second;
 		}
 	}
@@ -97,7 +100,8 @@ Client *Server::getClientByNickname(const std::string &nick) {
  * @return Pointer to the Channel, or NULL if not found.
  */
 Channel *Server::getChannel(const std::string &name) {
-	std::map<std::string, Channel *>::iterator it = this->_channels.find(name);
+	std::map<std::string, Channel *>::iterator it =
+	    this->_channels.find(toIrcLower(name));
 	if (it != this->_channels.end()) {
 		return it->second;
 	}
@@ -111,7 +115,7 @@ Channel *Server::getChannel(const std::string &name) {
  */
 Channel *Server::createChannel(const std::string &name) {
 	Channel *channel = new Channel(name);
-	this->_channels.insert(std::make_pair(name, channel));
+	this->_channels.insert(std::make_pair(toIrcLower(name), channel));
 	return channel;
 }
 
@@ -120,7 +124,8 @@ Channel *Server::createChannel(const std::string &name) {
  * @param name The name of the channel to remove.
  */
 void Server::removeChannel(const std::string &name) {
-	std::map<std::string, Channel *>::iterator it = this->_channels.find(name);
+	std::map<std::string, Channel *>::iterator it =
+	    this->_channels.find(toIrcLower(name));
 	if (it != this->_channels.end()) {
 		delete it->second;
 		this->_channels.erase(it);
@@ -220,8 +225,21 @@ void Server::_setupServerSocket() {
  * @throw std::runtime_error if poll() fails for reasons other than a signal.
  */
 void Server::_runEventLoop() {
-	std::cout << "Server is listening on port " << this->_port << "..."
+	std::cout << std::endl;
+	std::cout << ANSI_BOLD ANSI_CYAN
+	          << " ╔══════════════════════════════════════════╗" << std::endl;
+	std::cout << " ║        " ANSI_BRIGHT_WHITE "f t _ i r c   s e r v e r"
+	          << ANSI_CYAN "         ║" << std::endl;
+	std::cout << " ║" ANSI_RESET ANSI_CYAN "           ── C++ 98 Edition ──"
+	          << "           " ANSI_BOLD "║" << std::endl;
+	std::cout << " ╚══════════════════════════════════════════╝" << ANSI_RESET
 	          << std::endl;
+	std::cout << std::endl;
+	std::cout << LOG_SERVER << "Listening on port " << ANSI_BOLD << this->_port
+	          << LOG_R << " ..." << std::endl;
+	std::cout << LOG_SERVER << ANSI_DIM << "Waiting for connections." << LOG_R
+	          << std::endl;
+	std::cout << std::endl;
 
 	while (!g_shutdown) {
 		if (poll(this->_fds.data(), this->_fds.size(), -1) == -1) {
@@ -241,7 +259,9 @@ void Server::_runEventLoop() {
 		}
 	}
 
-	std::cout << "\nServer shutting down gracefully." << std::endl;
+	std::cout << std::endl;
+	std::cout << LOG_SERVER << ANSI_BOLD ANSI_YELLOW
+	          << "Server shutting down gracefully." << LOG_R << std::endl;
 }
 
 /**
@@ -254,12 +274,12 @@ void Server::_handleNewConnection() {
 	int client_fd =
 	    accept(this->_server_fd, (struct sockaddr *)&client_addr, &addr_len);
 	if (client_fd == -1) {
-		std::cerr << "Warning: accept() failed." << std::endl;
+		std::cerr << LOG_WARN << "accept() failed." << std::endl;
 		return;
 	}
 
 	if (fcntl(client_fd, F_SETFL, O_NONBLOCK) == -1) {
-		std::cerr << "Warning: fcntl() failed on client fd." << std::endl;
+		std::cerr << LOG_WARN << "fcntl() failed on client fd." << std::endl;
 		close(client_fd);
 		return;
 	}
@@ -283,8 +303,9 @@ void Server::_handleNewConnection() {
 	new_client->setHostname(ip_str);
 	this->_clients.insert(std::make_pair(client_fd, new_client));
 
-	std::cout << "New connection accepted. Client fd: " << client_fd
-	          << " IP: " << ip_str << std::endl;
+	std::cout << LOG_CONNECT << ANSI_GREEN << "New connection" << LOG_R
+	          << " from " << ANSI_BOLD << ip_str << LOG_R << LOG_FD << " (fd "
+	          << client_fd << ")" << LOG_R << std::endl;
 }
 
 /**
@@ -301,14 +322,16 @@ bool Server::_handleClientData(size_t client_idx) {
 	if (nbytes < 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
 			return false;
-		std::cerr << "Error: recv() failed for client " << client_fd
-		          << std::endl;
+		std::cerr << LOG_ERROR << "recv() failed for fd " << LOG_FD << client_fd
+		          << LOG_R << std::endl;
 		_removeClient(client_idx);
 		return true;
 	}
 
 	if (nbytes == 0) {
-		std::cout << "Client " << client_fd << " disconnected." << std::endl;
+		std::cout << LOG_DISCONNECT << ANSI_RED << "Client disconnected"
+		          << LOG_R << LOG_FD << " (fd " << client_fd << ")" << LOG_R
+		          << std::endl;
 		_removeClient(client_idx);
 		return true;
 	}
@@ -320,8 +343,9 @@ bool Server::_handleClientData(size_t client_idx) {
 		// Flood protection: disconnect if buffer grows too large without
 		// a complete command (no \r\n received)
 		if (it->second->getBuffer().size() > 4096) {
-			std::cerr << "Client " << client_fd
-			          << " exceeded buffer limit, disconnecting." << std::endl;
+			std::cerr << LOG_WARN << "Buffer overflow from fd " << LOG_FD
+			          << client_fd << LOG_R << ANSI_YELLOW << " — disconnecting"
+			          << LOG_R << std::endl;
 			_removeClient(client_idx);
 			return true;
 		}
@@ -343,7 +367,8 @@ void Server::_processClientCommands(Client &client) {
 		buffer.erase(0, pos + 2);
 
 		if (!command_line.empty()) {
-			std::cout << "Socket " << client.getFd() << " | C: " << command_line
+			std::cout << LOG_CMD << LOG_FD << "fd " << client.getFd() << LOG_R
+			          << " " << ANSI_BRIGHT_WHITE << command_line << LOG_R
 			          << std::endl;
 			this->_commandHandler.handleCommand(client, command_line);
 		}
@@ -370,5 +395,6 @@ void Server::_removeClient(size_t client_idx) {
 	close(client_fd);
 	this->_fds.erase(this->_fds.begin() + client_idx);
 
-	std::cout << "Client " << client_fd << " removed." << std::endl;
+	std::cout << LOG_DISCONNECT << ANSI_DIM << "Client fd " << client_fd
+	          << " removed." << LOG_R << std::endl;
 }

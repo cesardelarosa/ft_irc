@@ -1,5 +1,6 @@
 #include "Channel.hpp"
 #include "Client.hpp"
+#include "Utils.hpp"
 #include <algorithm>
 #include <sys/socket.h>
 
@@ -134,15 +135,15 @@ bool Channel::isOperator(Client *client) const {
 // ──────────────────────────── Invite management ─────────────────
 
 void Channel::addInvited(const std::string &nick) {
-	this->_invited.insert(nick);
+	this->_invited.insert(toIrcLower(nick));
 }
 
 bool Channel::isInvited(const std::string &nick) const {
-	return this->_invited.find(nick) != this->_invited.end();
+	return this->_invited.find(toIrcLower(nick)) != this->_invited.end();
 }
 
 void Channel::removeInvited(const std::string &nick) {
-	this->_invited.erase(nick);
+	this->_invited.erase(toIrcLower(nick));
 }
 
 // ──────────────────────────── Messaging ─────────────────────────

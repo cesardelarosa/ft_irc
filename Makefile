@@ -10,7 +10,8 @@ SRCS = $(addprefix $(SRC_DIR)/, \
 	    Server.cpp \
 	    Client.cpp \
 	    Channel.cpp \
-	    CommandHandler.cpp)
+	    CommandHandler.cpp \
+	    Utils.cpp)
 OBJS = $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRCS))
 
 all: $(NAME)
