@@ -160,13 +160,30 @@ void CommandHandler::_handleNick(Client                         &client,
 
 	std::string nick = args[0];
 
-	// Validate nickname: must start with a letter or special char, no spaces
-	if (nick.empty() || nick.find(' ') != std::string::npos) {
+	// Validate nickname per RFC 2812:
+	// - Must start with a letter or special char ([]\\`_^{|})
+	// - Subsequent chars: letters, digits, special, or hyphen
+	// - Max 9 characters
+	// - Cannot contain @, !, *, #, &, space, :, or comma
+	if (nick.empty() || nick.length() > 9 ||
+	    (!std::isalpha(nick[0]) &&
+	     std::string("[]\\`_^{|}").find(nick[0]) == std::string::npos)) {
 		std::string current = client.getNickname().empty()
 		                          ? std::string("*")
 		                          : client.getNickname();
 		_server->sendReply(client, ERR_ERRONEUSNICKNAME(current, nick));
 		return;
+	}
+	for (size_t j = 1; j < nick.size(); ++j) {
+		char c = nick[j];
+		if (!std::isalnum(c) && c != '-' &&
+		    std::string("[]\\`_^{|}").find(c) == std::string::npos) {
+			std::string current = client.getNickname().empty()
+			                          ? std::string("*")
+			                          : client.getNickname();
+			_server->sendReply(client, ERR_ERRONEUSNICKNAME(current, nick));
+			return;
+		}
 	}
 
 	// Check for nickname collisions

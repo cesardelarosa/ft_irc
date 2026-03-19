@@ -234,8 +234,10 @@ void Server::_runEventLoop() {
 			_handleNewConnection();
 
 		for (size_t i = 1; i < this->_fds.size(); ++i) {
-			if (this->_fds[i].revents & POLLIN)
-				_handleClientData(i);
+			if (this->_fds[i].revents & POLLIN) {
+				if (_handleClientData(i))
+					--i;
+			}
 		}
 	}
 
@@ -288,30 +290,44 @@ void Server::_handleNewConnection() {
 /**
  * @brief Handles incoming data from an existing client.
  * @param client_idx The index in the _fds vector.
+ * @return true if the client was removed (index invalidated), false otherwise.
  */
-void Server::_handleClientData(size_t client_idx) {
+bool Server::_handleClientData(size_t client_idx) {
 	char buffer[512];
 	int  client_fd = this->_fds[client_idx].fd;
 
 	int nbytes = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
 
-	if (nbytes <= 0) {
-		if (nbytes == 0)
-			std::cout << "Client " << client_fd << " disconnected."
-			          << std::endl;
-		else
-			std::cerr << "Error: recv() failed for client " << client_fd
-			          << std::endl;
-
+	if (nbytes < 0) {
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
+			return false;
+		std::cerr << "Error: recv() failed for client " << client_fd
+		          << std::endl;
 		_removeClient(client_idx);
-	} else {
-		buffer[nbytes] = '\0';
-		std::map<int, Client *>::iterator it = this->_clients.find(client_fd);
-		if (it != this->_clients.end()) {
-			it->second->addToBuffer(buffer, nbytes);
-			_processClientCommands(*it->second);
-		}
+		return true;
 	}
+
+	if (nbytes == 0) {
+		std::cout << "Client " << client_fd << " disconnected." << std::endl;
+		_removeClient(client_idx);
+		return true;
+	}
+
+	buffer[nbytes] = '\0';
+	std::map<int, Client *>::iterator it = this->_clients.find(client_fd);
+	if (it != this->_clients.end()) {
+		it->second->addToBuffer(buffer, nbytes);
+		// Flood protection: disconnect if buffer grows too large without
+		// a complete command (no \r\n received)
+		if (it->second->getBuffer().size() > 4096) {
+			std::cerr << "Client " << client_fd
+			          << " exceeded buffer limit, disconnecting." << std::endl;
+			_removeClient(client_idx);
+			return true;
+		}
+		_processClientCommands(*it->second);
+	}
+	return false;
 }
 
 /**

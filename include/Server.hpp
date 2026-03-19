@@ -43,7 +43,7 @@ class Server {
 	void _setupServerSocket();
 	void _runEventLoop();
 	void _handleNewConnection();
-	void _handleClientData(size_t client_idx);
+	bool _handleClientData(size_t client_idx);
 	void _removeClient(size_t client_idx);
 	void _processClientCommands(Client &client);
 
