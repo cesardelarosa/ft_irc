@@ -20,7 +20,8 @@ class Server {
 	~Server();
 
 	void start();
-	void sendReply(const Client &client, const std::string &message);
+	void sendReply(Client &client, const std::string &message);
+	void sendToClient(Client &client, const std::string &message);
 
 	// Accessors for CommandHandler to use
 	const std::string       &getPassword() const;
@@ -44,6 +45,8 @@ class Server {
 	void _runEventLoop();
 	void _handleNewConnection();
 	bool _handleClientData(size_t client_idx);
+	void _handleClientWrite(size_t client_idx);
+	void _updatePollEvents();
 	void _removeClient(size_t client_idx);
 	void _processClientCommands(Client &client);
 

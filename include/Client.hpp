@@ -34,9 +34,16 @@ class Client {
 	// Prefix for IRC messages
 	std::string getPrefix() const;
 
+	// Write buffer (POLLOUT)
+	void               queueMessage(const std::string &msg);
+	const std::string &getSendBuffer() const;
+	void               clearSentBytes(size_t n);
+	bool               hasPendingData() const;
+
   private:
 	int         _fd;
 	std::string _buffer;
+	std::string _send_buffer;
 
 	std::string _nickname;
 	std::string _username;

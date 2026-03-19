@@ -5,7 +5,6 @@
 #include "Utils.hpp"
 #include <iostream>
 #include <sstream>
-#include <sys/socket.h>
 
 /**
  * @brief Constructs a new CommandHandler and registers all available commands.
@@ -204,7 +203,7 @@ void CommandHandler::_handleNick(Client                         &client,
 		client.setNickname(nick);
 		// Notify the client itself
 		std::string msg = ":" + old_prefix + " NICK " + nick + "\r\n";
-		send(client.getFd(), msg.c_str(), msg.length(), 0);
+		_server->sendToClient(client, msg);
 	} else {
 		client.setNickname(nick);
 		_tryRegister(client);
@@ -433,7 +432,7 @@ void CommandHandler::_handlePrivmsg(Client                         &client,
 
 		std::string msg = ":" + client.getPrefix() + " PRIVMSG " + target +
 		                  " :" + text + "\r\n";
-		send(target_client->getFd(), msg.c_str(), msg.length(), 0);
+		_server->sendToClient(*target_client, msg);
 	}
 }
 
@@ -456,5 +455,5 @@ void CommandHandler::_handleQuit(Client                         &client,
 	// Send an ERROR message to the client before disconnecting
 	std::string error_msg = "ERROR :Closing Link: " + client.getNickname() +
 	                        " (Quit: " + reason + ")\r\n";
-	send(client.getFd(), error_msg.c_str(), error_msg.length(), 0);
+	_server->sendToClient(client, error_msg);
 }

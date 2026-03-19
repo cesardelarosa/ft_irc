@@ -98,3 +98,21 @@ std::string Client::getPrefix() const {
 	std::string host = this->_hostname.empty() ? "localhost" : this->_hostname;
 	return this->_nickname + "!" + this->_username + "@" + host;
 }
+
+// ──────────────────────────── Write buffer ───────────────────────
+
+void Client::queueMessage(const std::string &msg) {
+	this->_send_buffer += msg;
+}
+
+const std::string &Client::getSendBuffer() const {
+	return this->_send_buffer;
+}
+
+void Client::clearSentBytes(size_t n) {
+	this->_send_buffer.erase(0, n);
+}
+
+bool Client::hasPendingData() const {
+	return !this->_send_buffer.empty();
+}

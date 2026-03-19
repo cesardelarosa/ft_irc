@@ -159,8 +159,7 @@ void Channel::broadcastMessage(const std::string &message, Client *exclude) {
 	std::string final_msg = message + "\r\n";
 	for (size_t i = 0; i < this->_members.size(); ++i) {
 		if (this->_members[i] != exclude) {
-			send(this->_members[i]->getFd(), final_msg.c_str(),
-			     final_msg.length(), 0);
+			this->_members[i]->queueMessage(final_msg);
 		}
 	}
 }

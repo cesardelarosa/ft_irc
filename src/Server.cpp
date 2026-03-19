@@ -52,20 +52,23 @@ void Server::start() {
 }
 
 /**
- * @brief Sends a reply message to a specific client.
- * @details The message is prefixed with the server name and appended with
- * "\\r\\n".
+ * @brief Sends a server reply to a client by queueing it to their write buffer.
  * @param client The client to whom the reply should be sent.
  * @param message The content of the message to send.
  */
-void Server::sendReply(const Client &client, const std::string &message) {
+void Server::sendReply(Client &client, const std::string &message) {
 	std::string final_message =
 	    ":" + std::string("ircserv") + " " + message + "\r\n";
-	if (send(client.getFd(), final_message.c_str(), final_message.length(), 0) <
-	    0) {
-		std::cerr << LOG_ERROR << "send() failed for fd " << LOG_FD
-		          << client.getFd() << LOG_R << std::endl;
-	}
+	client.queueMessage(final_message);
+}
+
+/**
+ * @brief Sends a raw message to a client by queueing it to their write buffer.
+ * @param client The client to send the message to.
+ * @param message The raw message (must include \r\n if needed).
+ */
+void Server::sendToClient(Client &client, const std::string &message) {
+	client.queueMessage(message);
 }
 
 // ──────────────────────────── Accessors ─────────────────────────
@@ -114,7 +117,14 @@ Channel *Server::getChannel(const std::string &name) {
  * @return Pointer to the newly created Channel.
  */
 Channel *Server::createChannel(const std::string &name) {
-	Channel *channel = new Channel(name);
+	Channel *channel;
+	try {
+		channel = new Channel(name);
+	} catch (std::bad_alloc &) {
+		std::cerr << LOG_ERROR << "Out of memory creating channel " << LOG_CHAN
+		          << name << LOG_R << std::endl;
+		return NULL;
+	}
 	this->_channels.insert(std::make_pair(toIrcLower(name), channel));
 	return channel;
 }
@@ -242,6 +252,8 @@ void Server::_runEventLoop() {
 	std::cout << std::endl;
 
 	while (!g_shutdown) {
+		_updatePollEvents();
+
 		if (poll(this->_fds.data(), this->_fds.size(), -1) == -1) {
 			if (errno == EINTR)
 				break;
@@ -253,9 +265,13 @@ void Server::_runEventLoop() {
 
 		for (size_t i = 1; i < this->_fds.size(); ++i) {
 			if (this->_fds[i].revents & POLLIN) {
-				if (_handleClientData(i))
+				if (_handleClientData(i)) {
 					--i;
+					continue;
+				}
 			}
+			if (this->_fds[i].revents & POLLOUT)
+				_handleClientWrite(i);
 		}
 	}
 
@@ -299,7 +315,15 @@ void Server::_handleNewConnection() {
 	client_poll_fd.events = POLLIN;
 	this->_fds.push_back(client_poll_fd);
 
-	Client *new_client = new Client(client_fd);
+	Client *new_client;
+	try {
+		new_client = new Client(client_fd);
+	} catch (std::bad_alloc &) {
+		std::cerr << LOG_ERROR << "Out of memory for new client" << std::endl;
+		close(client_fd);
+		this->_fds.pop_back();
+		return;
+	}
 	new_client->setHostname(ip_str);
 	this->_clients.insert(std::make_pair(client_fd, new_client));
 
@@ -397,4 +421,47 @@ void Server::_removeClient(size_t client_idx) {
 
 	std::cout << LOG_DISCONNECT << ANSI_DIM << "Client fd " << client_fd
 	          << " removed." << LOG_R << std::endl;
+}
+
+/**
+ * @brief Handles writing pending data to a client socket.
+ * @details Called when POLLOUT fires. Writes as much as possible and handles
+ *          partial writes by keeping the unsent remainder in the buffer.
+ * @param client_idx The index in the _fds vector.
+ */
+void Server::_handleClientWrite(size_t client_idx) {
+	int client_fd = this->_fds[client_idx].fd;
+
+	std::map<int, Client *>::iterator it = this->_clients.find(client_fd);
+	if (it == this->_clients.end() || !it->second->hasPendingData())
+		return;
+
+	const std::string &buf = it->second->getSendBuffer();
+	ssize_t            sent = send(client_fd, buf.c_str(), buf.length(), 0);
+
+	if (sent < 0) {
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
+			return;
+		std::cerr << LOG_ERROR << "send() failed for fd " << LOG_FD << client_fd
+		          << LOG_R << std::endl;
+		return;
+	}
+
+	it->second->clearSentBytes(static_cast<size_t>(sent));
+}
+
+/**
+ * @brief Updates poll events for all client fds.
+ * @details Sets POLLOUT when a client has data waiting to be sent,
+ *          clears it when the send buffer is empty.
+ */
+void Server::_updatePollEvents() {
+	for (size_t i = 1; i < this->_fds.size(); ++i) {
+		int                               fd = this->_fds[i].fd;
+		std::map<int, Client *>::iterator it = this->_clients.find(fd);
+		if (it != this->_clients.end() && it->second->hasPendingData())
+			this->_fds[i].events = POLLIN | POLLOUT;
+		else
+			this->_fds[i].events = POLLIN;
+	}
 }
