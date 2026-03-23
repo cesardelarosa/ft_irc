@@ -1,5 +1,7 @@
 # ft_irc - Plan de Trabajo Final
 
+Este documento es útil durante el desarrollo del proyecto, no será entregado en la evaluación. El README.md que pide entregar el subject y explica en sí el proyecto completo actualmente se llama [README_entrega.md](./README_entrega.md).
+
 El núcleo del servidor ya es completamente funcional. Toda la infraestructura de red no bloqueante (`poll`), la arquitectura de clases (`Server`, `Client`, `Channel`) y el flujo básico del protocolo IRC están terminados y estables.
 
 Este documento organiza el trabajo restante del proyecto, dividiéndolo en dos bloques de trabajo independientes para poder avanzar en paralelo sin generar conflictos de código.
@@ -19,7 +21,7 @@ Para maximizar la eficiencia y evitar problemas al fusionar el código, el traba
 
 ### Tarea A: Gestión Avanzada de Canales (Operadores y Modos)
 
-**Objetivo:** Implementar los comandos de administración de canales exigidos en los requisitos obligatorios, asegurando coincidencia plena de las respuestas del servidor con el estándar RFC.
+**Objetivo:** Implementar los comandos de administración de canales exigidos en los requisitos obligatorios, asegurando coincidencia plena de las respuestas del servidor con el estándar RFC 2812.
 
 **Archivos principales:** `CommandHandler.cpp`, `Channel.cpp` y `Replies.hpp`.
 
@@ -30,7 +32,7 @@ Para maximizar la eficiencia y evitar problemas al fusionar el código, el traba
     * `+k` / `-k`: Establecer o eliminar la contraseña (key) del canal.
     * `+o` / `-o`: Otorgar o retirar privilegios de operador a un miembro.
     * `+l` / `-l`: Establecer o eliminar el límite máximo de usuarios.
-* **Respuestas Numéricas (RFC):** Revisar los comandos implementados para garantizar que devuelven el código numérico de error exacto en caso de fallo (ej. falta de privilegios, canal inexistente, sintaxis incorrecta). Habrá que ampliar las macros en `Replies.hpp`.
+* **Respuestas Numéricas (RFC 2812):** Revisar los comandos implementados para garantizar que devuelven el código numérico de error exacto en caso de fallo (ej. falta de privilegios, canal inexistente, sintaxis incorrecta). Habrá que ampliar las macros en `Replies.hpp`.
 
 
 ### Tarea B: Robustez del Protocolo, Errores y Bonus
