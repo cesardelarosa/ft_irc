@@ -226,6 +226,7 @@ void Server::_setupServerSocket() {
 	struct pollfd server_poll_fd;
 	server_poll_fd.fd = this->_server_fd;
 	server_poll_fd.events = POLLIN;
+	server_poll_fd.revents = 0;
 	this->_fds.push_back(server_poll_fd);
 }
 
@@ -313,6 +314,7 @@ void Server::_handleNewConnection() {
 	struct pollfd client_poll_fd;
 	client_poll_fd.fd = client_fd;
 	client_poll_fd.events = POLLIN;
+	client_poll_fd.revents = 0;
 	this->_fds.push_back(client_poll_fd);
 
 	Client *new_client;
