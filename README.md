@@ -21,7 +21,7 @@ Para maximizar la eficiencia y evitar problemas al fusionar el código, el traba
 
 ### Tarea A: Gestión Avanzada de Canales (Operadores y Modos)
 
-**Objetivo:** Implementar los comandos de administración de canales exigidos en los requisitos obligatorios, asegurando coincidencia plena de las respuestas del servidor con el estándar RFC 2812.
+**Objetivo:** Implementar los comandos de administración de canales exigidos en los requisitos obligatorios, asegurando coincidencia plena de las respuestas del servidor con el estándar RFC 2812
 
 **Archivos principales:** `CommandHandler.cpp`, `Channel.cpp` y `Replies.hpp`.
 
