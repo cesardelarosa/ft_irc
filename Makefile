@@ -9,7 +9,7 @@ STRICT_FLAGS = -pedantic -Wshadow -Wold-style-cast \
 
 LUNATIC_FLAGS = -Weffc++
 
-#CXXFLAGS += $(STRICT_FLAGS)
+CXXFLAGS += $(STRICT_FLAGS)
 #CXXFLAGS += $(LUNATIC_FLAGS)
 
 SRC_DIR = src
@@ -31,7 +31,7 @@ all: $(NAME)
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(NAME): $(OBJ_DIR) $(OBJS)
