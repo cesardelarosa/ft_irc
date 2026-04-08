@@ -5,13 +5,13 @@
 
 #include <string>
 
-// ──────────────────────── IRC Case Conversion (RFC 1459) ────────────────────
+// ──────────────────────── IRC Case Conversion (RFC 2812) ────────────────────
 std::string toIrcLower(const std::string &str);
 std::string toUpper(const std::string &str);
 
 // ──────────────────────── ANSI Terminal Colors ─────────────────────────────
-// Retro 90s aesthetic — inspired by mIRC / BitchX terminal style
 
+// Styles
 #define ANSI_RESET "\033[0m"
 #define ANSI_BOLD "\033[1m"
 #define ANSI_DIM "\033[2m"

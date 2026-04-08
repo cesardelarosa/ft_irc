@@ -2,6 +2,14 @@ NAME = ircserv
 CXX = c++
 CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -Iinclude
 
+STRICT_FLAGS = -pedantic -Wshadow -Wold-style-cast \
+				-Wnon-virtual-dtor -Woverloaded-virtual \
+				-Wconversion -Wsign-conversion
+
+LUNATIC_FLAGS = -Weffc++
+
+#CXXFLAGS += $(STRICT_FLAGS) #$(LUNATIC_FLAGS)
+
 SRC_DIR = src
 OBJ_DIR = obj
 

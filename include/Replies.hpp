@@ -3,8 +3,6 @@
 #ifndef REPLIES_HPP
 #define REPLIES_HPP
 
-#include <string>
-
 // ──────────────────────────── Success Replies ────────────────────────────
 
 #define RPL_WELCOME(nick, user, host)                                        \

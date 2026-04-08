@@ -9,7 +9,6 @@
 #include <stdexcept>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <vector>
 
 /**
  * @brief Constructs a new Server object.
@@ -147,7 +146,8 @@ void Server::removeChannel(const std::string &name) {
  * @details Also cleans up empty channels after the client leaves.
  * @param client The client to remove from all channels.
  */
-void Server::removeClientFromAllChannels(Client *client, const std::string &reason) {
+void Server::removeClientFromAllChannels(Client            *client,
+                                         const std::string &reason) {
 	std::vector<std::string> empty_channels;
 
 	for (std::map<std::string, Channel *>::iterator it =
@@ -216,7 +216,7 @@ void Server::_runEventLoop() {
 		if (this->_eventManager.getRevents(0) & POLLIN)
 			_handleNewConnection();
 
-		for (size_t i = 1; i < this->_eventManager.getSocketCount(); ) {
+		for (size_t i = 1; i < this->_eventManager.getSocketCount();) {
 			int   fd = this->_eventManager.getFd(i);
 			short revents = this->_eventManager.getRevents(i);
 			bool  removed = false;

@@ -11,7 +11,6 @@
 #include <csignal>
 #include <map>
 #include <string>
-#include <vector>
 
 extern volatile sig_atomic_t g_shutdown;
 
@@ -25,14 +24,15 @@ class Server {
 	void sendToClient(Client &client, const std::string &message);
 
 	// Accessors for CommandHandler to use
-	const std::string       &getPassword() const;
+	const std::string                &getPassword() const;
 	std::map<int, Client *>          &getClients();
 	std::map<std::string, Channel *> &getChannels();
-	Client                           *getClientByNickname(const std::string &nick);
-	Channel                          *getChannel(const std::string &name);
-	Channel                          *createChannel(const std::string &name);
-	void                              removeChannel(const std::string &name);
-	void                              removeClientFromAllChannels(Client *client, const std::string &reason = "Client quit");
+	Client  *getClientByNickname(const std::string &nick);
+	Channel *getChannel(const std::string &name);
+	Channel *createChannel(const std::string &name);
+	void     removeChannel(const std::string &name);
+	void     removeClientFromAllChannels(Client            *client,
+	                                     const std::string &reason = "Client quit");
 
   private:
 	int                              _port;
