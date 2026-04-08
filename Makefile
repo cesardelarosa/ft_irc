@@ -4,11 +4,13 @@ CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -Iinclude
 
 STRICT_FLAGS = -pedantic -Wshadow -Wold-style-cast \
 				-Wnon-virtual-dtor -Woverloaded-virtual \
-				-Wconversion -Wsign-conversion
+				-Wconversion -Wsign-conversion \
+				-Wnull-dereference -Wlogical-op -Wformat=2
 
 LUNATIC_FLAGS = -Weffc++
 
-#CXXFLAGS += $(STRICT_FLAGS) #$(LUNATIC_FLAGS)
+#CXXFLAGS += $(STRICT_FLAGS)
+#CXXFLAGS += $(LUNATIC_FLAGS)
 
 SRC_DIR = src
 OBJ_DIR = obj

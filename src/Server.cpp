@@ -116,15 +116,17 @@ Channel *Server::getChannel(const std::string &name) {
  * @return Pointer to the newly created Channel.
  */
 Channel *Server::createChannel(const std::string &name) {
-	Channel *channel;
+	Channel *channel = NULL;
 	try {
 		channel = new Channel(name);
-	} catch (std::bad_alloc &) {
+		this->_channels.insert(std::make_pair(toIrcLower(name), channel));
+	} catch (const std::exception &) {
 		std::cerr << LOG_ERROR << "Out of memory creating channel " << LOG_CHAN
 		          << name << LOG_R << std::endl;
+		if (channel)
+			delete channel;
 		return NULL;
 	}
-	this->_channels.insert(std::make_pair(toIrcLower(name), channel));
 	return channel;
 }
 
@@ -261,18 +263,19 @@ void Server::_handleNewConnection() {
 		return;
 	}
 
-	Client *new_client;
+	Client *new_client = NULL;
 	try {
 		new_client = new Client(client_fd);
 		new_client->setHostname(ip_str);
-	} catch (std::bad_alloc &) {
+		this->_clients.insert(std::make_pair(client_fd, new_client));
+		this->_eventManager.addSocket(client_fd, POLLIN);
+	} catch (const std::exception &) {
 		std::cerr << LOG_ERROR << "Out of memory for new client" << std::endl;
+		if (new_client)
+			delete new_client;
 		close(client_fd);
 		return;
 	}
-
-	this->_eventManager.addSocket(client_fd, POLLIN);
-	this->_clients.insert(std::make_pair(client_fd, new_client));
 
 	std::cout << LOG_CONNECT << ANSI_GREEN << "New connection" << LOG_R
 	          << " from " << ANSI_BOLD << ip_str << LOG_R << LOG_FD << " (fd "
@@ -360,7 +363,7 @@ void Server::_processClientCommands(Client &client) {
 void Server::_removeClient(int client_fd) {
 	std::map<int, Client *>::iterator it = this->_clients.find(client_fd);
 	if (it != this->_clients.end()) {
-		removeClientFromAllChannels(it->second);
+		removeClientFromAllChannels(it->second, it->second->getQuitReason());
 		delete it->second;
 		this->_clients.erase(it);
 	}

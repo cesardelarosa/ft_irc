@@ -43,12 +43,15 @@ class Client {
 
 	bool               isDisconnected() const;
 	void               setDisconnected();
+	const std::string &getQuitReason() const;
+	void               setQuitReason(const std::string &reason);
 
   private:
 	Socket _socket;
 
 	std::string _buffer;
 	std::string _send_buffer;
+	std::string _quit_reason;
 
 	std::string _nickname;
 	std::string _username;

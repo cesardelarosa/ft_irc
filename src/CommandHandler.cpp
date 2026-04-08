@@ -207,7 +207,8 @@ void CommandHandler::_handleNick(Client                         &client,
 
 		// Notify all common channels
 		std::map<std::string, Channel *> &channels = _server->getChannels();
-		for (std::map<std::string, Channel *>::iterator it = channels.begin(); it != channels.end(); ++it) {
+		for (std::map<std::string, Channel *>::iterator it = channels.begin();
+		     it != channels.end(); ++it) {
 			if (it->second->isMember(&client)) {
 				it->second->broadcastMessage(msg, &client);
 			}
@@ -294,7 +295,8 @@ void CommandHandler::_handleJoin(Client                         &client,
 			channel = _server->createChannel(channel_name);
 			if (channel == NULL) {
 				_server->sendReply(
-				    client, ERR_NOSUCHCHANNEL(client.getNickname(), channel_name));
+				    client,
+				    ERR_NOSUCHCHANNEL(client.getNickname(), channel_name));
 				continue;
 			}
 		} else {
@@ -474,14 +476,11 @@ void CommandHandler::_handleQuit(Client                         &client,
 	std::cout << LOG_DISCONNECT << LOG_NICK << client.getNickname() << LOG_R
 	          << " quit: " << ANSI_DIM << reason << LOG_R << std::endl;
 
-	// The actual cleanup (removing from channels, closing socket) is handled
-	// by Server::_removeClient. We just need to notify channels and mark it.
-	_server->removeClientFromAllChannels(&client, reason);
-
-	// Send an ERROR message to the client before disconnecting
+	// Sent an ERROR message to the client before disconnecting
 	std::string error_msg = "ERROR :Closing Link: " + client.getNickname() +
 	                        " (Quit: " + reason + ")\r\n";
 	_server->sendToClient(client, error_msg);
 
+	client.setQuitReason(reason);
 	client.setDisconnected();
 }

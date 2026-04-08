@@ -55,7 +55,8 @@ void Socket::initServer(int port) {
 		if (this->_fd == -1)
 			continue;
 
-		if (setsockopt(this->_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
+		if (setsockopt(this->_fd, SOL_SOCKET, SO_REUSEADDR, &opt,
+		               sizeof(opt)) == -1) {
 			close(this->_fd);
 			this->_fd = -1;
 			continue;

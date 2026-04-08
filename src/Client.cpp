@@ -4,7 +4,9 @@
  * @brief Constructs a new Client object.
  * @param fd The file descriptor of the client's socket.
  */
-Client::Client(int fd) : _socket(fd), _has_pass(false), _is_registered(false), _disconnected(false) {
+Client::Client(int fd)
+    : _socket(fd), _quit_reason("Client disconnected"), _has_pass(false),
+      _is_registered(false), _disconnected(false) {
 	this->_socket.setNonBlocking();
 }
 
@@ -124,4 +126,12 @@ bool Client::isDisconnected() const {
 
 void Client::setDisconnected() {
 	this->_disconnected = true;
+}
+
+const std::string &Client::getQuitReason() const {
+	return this->_quit_reason;
+}
+
+void Client::setQuitReason(const std::string &reason) {
+	this->_quit_reason = reason;
 }
