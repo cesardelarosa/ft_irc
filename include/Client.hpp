@@ -41,6 +41,9 @@ class Client {
 	void               clearSentBytes(size_t n);
 	bool               hasPendingData() const;
 
+	bool               isDisconnected() const;
+	void               setDisconnected();
+
   private:
 	Socket _socket;
 
@@ -53,6 +56,7 @@ class Client {
 	std::string _hostname;
 	bool        _has_pass;
 	bool        _is_registered;
+	bool        _disconnected;
 
 	Client();
 	Client(Client const &src);

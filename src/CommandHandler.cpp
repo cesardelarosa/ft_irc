@@ -202,8 +202,16 @@ void CommandHandler::_handleNick(Client                         &client,
 		std::string old_prefix = client.getPrefix();
 		client.setNickname(nick);
 		// Notify the client itself
-		std::string msg = ":" + old_prefix + " NICK " + nick + "\r\n";
-		_server->sendToClient(client, msg);
+		std::string msg = ":" + old_prefix + " NICK " + nick;
+		_server->sendToClient(client, msg + "\r\n");
+
+		// Notify all common channels
+		std::map<std::string, Channel *> &channels = _server->getChannels();
+		for (std::map<std::string, Channel *>::iterator it = channels.begin(); it != channels.end(); ++it) {
+			if (it->second->isMember(&client)) {
+				it->second->broadcastMessage(msg, &client);
+			}
+		}
 	} else {
 		client.setNickname(nick);
 		_tryRegister(client);
@@ -252,14 +260,28 @@ void CommandHandler::_handleJoin(Client                         &client,
 	// Support joining multiple channels separated by commas
 	std::stringstream ss(args[0]);
 	std::string       channel_name;
-	std::string       key = (args.size() > 1) ? args[1] : "";
 
+	std::vector<std::string> keys;
+	if (args.size() > 1) {
+		std::stringstream ss_keys(args[1]);
+		std::string       tmp_key;
+		while (std::getline(ss_keys, tmp_key, ',')) {
+			keys.push_back(tmp_key);
+		}
+	}
+
+	size_t idx = 0;
 	while (std::getline(ss, channel_name, ',')) {
 		if (channel_name.empty())
 			continue;
 
-		// Channel names must start with '#'
-		if (channel_name[0] != '#' && channel_name[0] != '&') {
+		std::string key = (idx < keys.size()) ? keys[idx] : "";
+		idx++;
+
+		// Channel names must start with '#' or '&' and follow basic RFC rules
+		if (channel_name.length() < 2 || channel_name.length() > 50 ||
+		    (channel_name[0] != '#' && channel_name[0] != '&') ||
+		    channel_name.find_first_of(" ,\x07\r\n") != std::string::npos) {
 			_server->sendReply(
 			    client, ERR_NOSUCHCHANNEL(client.getNickname(), channel_name));
 			continue;
@@ -270,6 +292,11 @@ void CommandHandler::_handleJoin(Client                         &client,
 
 		if (is_new) {
 			channel = _server->createChannel(channel_name);
+			if (channel == NULL) {
+				_server->sendReply(
+				    client, ERR_NOSUCHCHANNEL(client.getNickname(), channel_name));
+				continue;
+			}
 		} else {
 			// Already a member? Skip silently
 			if (channel->isMember(&client))
@@ -448,12 +475,13 @@ void CommandHandler::_handleQuit(Client                         &client,
 	          << " quit: " << ANSI_DIM << reason << LOG_R << std::endl;
 
 	// The actual cleanup (removing from channels, closing socket) is handled
-	// by Server::_removeClient, which is called when recv() returns 0 after
-	// the client closes the connection. We just need to notify channels.
-	_server->removeClientFromAllChannels(&client);
+	// by Server::_removeClient. We just need to notify channels and mark it.
+	_server->removeClientFromAllChannels(&client, reason);
 
 	// Send an ERROR message to the client before disconnecting
 	std::string error_msg = "ERROR :Closing Link: " + client.getNickname() +
 	                        " (Quit: " + reason + ")\r\n";
 	_server->sendToClient(client, error_msg);
+
+	client.setDisconnected();
 }

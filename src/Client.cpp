@@ -4,7 +4,7 @@
  * @brief Constructs a new Client object.
  * @param fd The file descriptor of the client's socket.
  */
-Client::Client(int fd) : _socket(fd), _has_pass(false), _is_registered(false) {
+Client::Client(int fd) : _socket(fd), _has_pass(false), _is_registered(false), _disconnected(false) {
 	this->_socket.setNonBlocking();
 }
 
@@ -116,4 +116,12 @@ void Client::clearSentBytes(size_t n) {
 
 bool Client::hasPendingData() const {
 	return !this->_send_buffer.empty();
+}
+
+bool Client::isDisconnected() const {
+	return this->_disconnected;
+}
+
+void Client::setDisconnected() {
+	this->_disconnected = true;
 }

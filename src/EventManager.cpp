@@ -19,10 +19,10 @@ void EventManager::addSocket(int fd, short events) {
 }
 
 void EventManager::removeSocket(int fd) {
-	for (std::vector<struct pollfd>::iterator it = this->_fds.begin();
-	     it != this->_fds.end(); ++it) {
-		if (it->fd == fd) {
-			this->_fds.erase(it);
+	for (size_t i = 0; i < this->_fds.size(); ++i) {
+		if (this->_fds[i].fd == fd) {
+			this->_fds[i] = this->_fds.back();
+			this->_fds.pop_back();
 			break;
 		}
 	}

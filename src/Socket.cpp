@@ -49,26 +49,33 @@ void Socket::initServer(int port) {
 		throw std::runtime_error(std::string("getaddrinfo: ") +
 		                         gai_strerror(status));
 
-	this->_fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-	if (this->_fd == -1) {
-		freeaddrinfo(res);
-		throw std::runtime_error("Failed to create socket.");
-	}
+	struct addrinfo *p;
+	for (p = res; p != NULL; p = p->ai_next) {
+		this->_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+		if (this->_fd == -1)
+			continue;
 
-	if (setsockopt(this->_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) ==
-	    -1) {
-		freeaddrinfo(res);
-		throw std::runtime_error("Failed to set socket options.");
-	}
+		if (setsockopt(this->_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
+			close(this->_fd);
+			this->_fd = -1;
+			continue;
+		}
 
-	setNonBlocking();
+		setNonBlocking();
 
-	if (bind(this->_fd, res->ai_addr, res->ai_addrlen) == -1) {
-		freeaddrinfo(res);
-		throw std::runtime_error("Failed to bind to port.");
+		if (bind(this->_fd, p->ai_addr, p->ai_addrlen) == 0) {
+			break; /* Success */
+		}
+
+		close(this->_fd);
+		this->_fd = -1;
 	}
 
 	freeaddrinfo(res);
+
+	if (p == NULL) {
+		throw std::runtime_error("Failed to bind to port.");
+	}
 
 	if (listen(this->_fd, 10) == -1)
 		throw std::runtime_error("Failed to listen on socket.");

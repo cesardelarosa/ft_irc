@@ -26,12 +26,13 @@ class Server {
 
 	// Accessors for CommandHandler to use
 	const std::string       &getPassword() const;
-	std::map<int, Client *> &getClients();
-	Client                  *getClientByNickname(const std::string &nick);
-	Channel                 *getChannel(const std::string &name);
-	Channel                 *createChannel(const std::string &name);
-	void                     removeChannel(const std::string &name);
-	void                     removeClientFromAllChannels(Client *client);
+	std::map<int, Client *>          &getClients();
+	std::map<std::string, Channel *> &getChannels();
+	Client                           *getClientByNickname(const std::string &nick);
+	Channel                          *getChannel(const std::string &name);
+	Channel                          *createChannel(const std::string &name);
+	void                              removeChannel(const std::string &name);
+	void                              removeClientFromAllChannels(Client *client, const std::string &reason = "Client quit");
 
   private:
 	int                              _port;
@@ -46,7 +47,7 @@ class Server {
 	void _runEventLoop();
 	void _handleNewConnection();
 	bool _handleClientData(int client_idx);
-	void _handleClientWrite(int client_idx);
+	bool _handleClientWrite(int client_idx);
 	void _updatePollEvents();
 	void _removeClient(int client_idx);
 	void _processClientCommands(Client &client);
