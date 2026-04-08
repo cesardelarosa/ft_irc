@@ -16,7 +16,8 @@
  * @param password The password required for clients to connect.
  */
 Server::Server(int port, std::string password)
-    : _port(port), _password(password), _commandHandler(this) {
+    : _port(port), _password(password), _clients(), _channels(),
+      _serverSocket(), _eventManager(), _commandHandler(this) {
 	std::cout << LOG_SERVER << "Server created on port: " << ANSI_BOLD
 	          << this->_port << LOG_R << std::endl;
 }

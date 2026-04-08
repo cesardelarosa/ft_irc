@@ -5,8 +5,10 @@
  * @param fd The file descriptor of the client's socket.
  */
 Client::Client(int fd)
-    : _socket(fd), _quit_reason("Client disconnected"), _has_pass(false),
-      _is_registered(false), _disconnected(false) {
+    : _socket(fd), _buffer(), _send_buffer(),
+      _quit_reason("Client disconnected"), _nickname(), _username(),
+      _realname(), _hostname(), _has_pass(false), _is_registered(false),
+      _disconnected(false) {
 	this->_socket.setNonBlocking();
 }
 

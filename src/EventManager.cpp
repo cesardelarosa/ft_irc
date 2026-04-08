@@ -2,7 +2,7 @@
 
 // ──────────────────────────── Constructors ────────────────────────────
 
-EventManager::EventManager() {
+EventManager::EventManager() : _fds() {
 }
 
 EventManager::~EventManager() {

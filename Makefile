@@ -1,6 +1,6 @@
 NAME = ircserv
 CXX = c++
-CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -Iinclude
+CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -Iinclude -MMD -MP
 
 STRICT_FLAGS = -pedantic -Wshadow -Wold-style-cast \
 				-Wnon-virtual-dtor -Woverloaded-virtual \
@@ -10,7 +10,7 @@ STRICT_FLAGS = -pedantic -Wshadow -Wold-style-cast \
 LUNATIC_FLAGS = -Weffc++
 
 CXXFLAGS += $(STRICT_FLAGS)
-#CXXFLAGS += $(LUNATIC_FLAGS)
+CXXFLAGS += $(LUNATIC_FLAGS)
 
 SRC_DIR = src
 OBJ_DIR = obj
@@ -44,5 +44,7 @@ fclean: clean
 	rm -f $(NAME)
 
 re: fclean all
+
+-include $(OBJS:.o=.d)
 
 .PHONY: all clean fclean re

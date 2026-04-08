@@ -9,8 +9,8 @@
  * @param name The name of the channel (e.g., "#general").
  */
 Channel::Channel(std::string const &name)
-    : _name(name), _user_limit(0), _invite_only(false),
-      _topic_restricted(false) {
+    : _name(name), _topic(), _key(), _user_limit(0), _invite_only(false),
+      _topic_restricted(false), _members(), _operators(), _invited() {
 }
 
 /**

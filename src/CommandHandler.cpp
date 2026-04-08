@@ -10,7 +10,7 @@
  * @brief Constructs a new CommandHandler and registers all available commands.
  * @param server Pointer to the main Server object.
  */
-CommandHandler::CommandHandler(Server *server) : _server(server) {
+CommandHandler::CommandHandler(Server *server) : _server(server), _commands() {
 	this->_commands["PASS"] = &CommandHandler::_handlePass;
 	this->_commands["NICK"] = &CommandHandler::_handleNick;
 	this->_commands["USER"] = &CommandHandler::_handleUser;
