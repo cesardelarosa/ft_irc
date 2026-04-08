@@ -176,12 +176,7 @@ void Server::removeClientFromAllChannels(Client *client) {
  */
 void Server::_setupServerSocket() {
 	this->_serverSocket.initServer(this->_port);
-
-	struct pollfd server_poll_fd;
-	server_poll_fd.fd = this->_serverSocket.get();
-	server_poll_fd.events = POLLIN;
-	server_poll_fd.revents = 0;
-	this->_fds.push_back(server_poll_fd);
+	this->_eventManager.addSocket(this->_serverSocket.get(), POLLIN);
 }
 
 /**
@@ -209,24 +204,27 @@ void Server::_runEventLoop() {
 	while (!g_shutdown) {
 		_updatePollEvents();
 
-		if (poll(this->_fds.data(), this->_fds.size(), -1) == -1) {
+		if (this->_eventManager.waitEvents(-1) == -1) {
 			if (errno == EINTR)
 				break;
 			throw std::runtime_error("poll() failed.");
 		}
 
-		if (this->_fds[0].revents & POLLIN)
+		if (this->_eventManager.getRevents(0) & POLLIN)
 			_handleNewConnection();
 
-		for (size_t i = 1; i < this->_fds.size(); ++i) {
-			if (this->_fds[i].revents & POLLIN) {
-				if (_handleClientData(i)) {
+		for (size_t i = 1; i < this->_eventManager.getSocketCount(); ++i) {
+			int   fd = this->_eventManager.getFd(i);
+			short revents = this->_eventManager.getRevents(i);
+
+			if (revents & POLLIN) {
+				if (_handleClientData(fd)) {
 					--i;
 					continue;
 				}
 			}
-			if (this->_fds[i].revents & POLLOUT)
-				_handleClientWrite(i);
+			if (revents & POLLOUT)
+				_handleClientWrite(fd);
 		}
 	}
 
@@ -257,12 +255,7 @@ void Server::_handleNewConnection() {
 		return;
 	}
 
-	struct pollfd client_poll_fd;
-	client_poll_fd.fd = client_fd;
-	client_poll_fd.events = POLLIN;
-	client_poll_fd.revents = 0;
-	this->_fds.push_back(client_poll_fd);
-
+	this->_eventManager.addSocket(client_fd, POLLIN);
 	this->_clients.insert(std::make_pair(client_fd, new_client));
 
 	std::cout << LOG_CONNECT << ANSI_GREEN << "New connection" << LOG_R
@@ -275,18 +268,16 @@ void Server::_handleNewConnection() {
  * @param client_idx The index in the _fds vector.
  * @return true if the client was removed (index invalidated), false otherwise.
  */
-bool Server::_handleClientData(size_t client_idx) {
+bool Server::_handleClientData(int client_fd) {
 	char buffer[512];
-	int  client_fd = this->_fds[client_idx].fd;
-
-	int nbytes = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
+	int  nbytes = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
 
 	if (nbytes < 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
 			return false;
 		std::cerr << LOG_ERROR << "recv() failed for fd " << LOG_FD << client_fd
 		          << LOG_R << std::endl;
-		_removeClient(client_idx);
+		_removeClient(client_fd);
 		return true;
 	}
 
@@ -294,7 +285,7 @@ bool Server::_handleClientData(size_t client_idx) {
 		std::cout << LOG_DISCONNECT << ANSI_RED << "Client disconnected"
 		          << LOG_R << LOG_FD << " (fd " << client_fd << ")" << LOG_R
 		          << std::endl;
-		_removeClient(client_idx);
+		_removeClient(client_fd);
 		return true;
 	}
 
@@ -302,13 +293,12 @@ bool Server::_handleClientData(size_t client_idx) {
 	std::map<int, Client *>::iterator it = this->_clients.find(client_fd);
 	if (it != this->_clients.end()) {
 		it->second->addToBuffer(buffer, nbytes);
-		// Flood protection: disconnect if buffer grows too large without
-		// a complete command (no \r\n received)
+
 		if (it->second->getBuffer().size() > 4096) {
 			std::cerr << LOG_WARN << "Buffer overflow from fd " << LOG_FD
 			          << client_fd << LOG_R << ANSI_YELLOW << " — disconnecting"
 			          << LOG_R << std::endl;
-			_removeClient(client_idx);
+			_removeClient(client_fd);
 			return true;
 		}
 		_processClientCommands(*it->second);
@@ -342,19 +332,15 @@ void Server::_processClientCommands(Client &client) {
  * @details Cleans up channels, closes socket, and deallocates client.
  * @param client_idx The index in the _fds vector.
  */
-void Server::_removeClient(size_t client_idx) {
-	int client_fd = this->_fds[client_idx].fd;
-
-	// Remove client from all channels first
+void Server::_removeClient(int client_fd) {
 	std::map<int, Client *>::iterator it = this->_clients.find(client_fd);
 	if (it != this->_clients.end()) {
 		removeClientFromAllChannels(it->second);
+		delete it->second;
+		this->_clients.erase(it);
 	}
 
-	delete this->_clients[client_fd];
-	this->_clients.erase(client_fd);
-
-	this->_fds.erase(this->_fds.begin() + client_idx);
+	this->_eventManager.removeSocket(client_fd);
 
 	std::cout << LOG_DISCONNECT << ANSI_DIM << "Client fd " << client_fd
 	          << " removed." << LOG_R << std::endl;
@@ -366,9 +352,7 @@ void Server::_removeClient(size_t client_idx) {
  *          partial writes by keeping the unsent remainder in the buffer.
  * @param client_idx The index in the _fds vector.
  */
-void Server::_handleClientWrite(size_t client_idx) {
-	int client_fd = this->_fds[client_idx].fd;
-
+void Server::_handleClientWrite(int client_fd) {
 	std::map<int, Client *>::iterator it = this->_clients.find(client_fd);
 	if (it == this->_clients.end() || !it->second->hasPendingData())
 		return;
@@ -393,12 +377,12 @@ void Server::_handleClientWrite(size_t client_idx) {
  *          clears it when the send buffer is empty.
  */
 void Server::_updatePollEvents() {
-	for (size_t i = 1; i < this->_fds.size(); ++i) {
-		int                               fd = this->_fds[i].fd;
-		std::map<int, Client *>::iterator it = this->_clients.find(fd);
-		if (it != this->_clients.end() && it->second->hasPendingData())
-			this->_fds[i].events = POLLIN | POLLOUT;
+	for (std::map<int, Client *>::iterator it = this->_clients.begin();
+	     it != this->_clients.end(); ++it) {
+		int fd = it->first;
+		if (it->second->hasPendingData())
+			this->_eventManager.setEvents(fd, POLLIN | POLLOUT);
 		else
-			this->_fds[i].events = POLLIN;
+			this->_eventManager.setEvents(fd, POLLIN);
 	}
 }

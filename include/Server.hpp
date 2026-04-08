@@ -6,10 +6,10 @@
 #include "Channel.hpp"
 #include "Client.hpp"
 #include "CommandHandler.hpp"
+#include "EventManager.hpp"
 #include "Socket.hpp"
 #include <csignal>
 #include <map>
-#include <poll.h>
 #include <string>
 #include <vector>
 
@@ -36,19 +36,19 @@ class Server {
   private:
 	int                              _port;
 	std::string                      _password;
-	Socket                           _serverSocket;
-	std::vector<struct pollfd>       _fds;
 	std::map<int, Client *>          _clients;
 	std::map<std::string, Channel *> _channels;
+	Socket                           _serverSocket;
+	EventManager                     _eventManager;
 	CommandHandler                   _commandHandler;
 
 	void _setupServerSocket();
 	void _runEventLoop();
 	void _handleNewConnection();
-	bool _handleClientData(size_t client_idx);
-	void _handleClientWrite(size_t client_idx);
+	bool _handleClientData(int client_idx);
+	void _handleClientWrite(int client_idx);
 	void _updatePollEvents();
-	void _removeClient(size_t client_idx);
+	void _removeClient(int client_idx);
 	void _processClientCommands(Client &client);
 
 	Server();

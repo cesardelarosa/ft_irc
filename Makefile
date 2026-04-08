@@ -9,6 +9,7 @@ SRCS = $(addprefix $(SRC_DIR)/, \
             main.cpp \
 	    Server.cpp \
 		Socket.cpp \
+		EventManager.cpp \
 	    Client.cpp \
 	    Channel.cpp \
 	    CommandHandler.cpp \
