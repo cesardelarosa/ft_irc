@@ -84,20 +84,23 @@ void Socket::initServer(int port) {
 
 int Socket::acceptClient(std::string &ip_str) {
 	struct sockaddr_storage client_addr;
-	socklen_t               addr_len = sizeof(client_addr);
+	socklen_t addr_len = static_cast<socklen_t>(sizeof(client_addr));
 
-	int client_fd =
-	    accept(this->_fd, (struct sockaddr *)&client_addr, &addr_len);
+	int client_fd = accept(
+	    this->_fd, reinterpret_cast<sockaddr *>(&client_addr), &addr_len);
+
 	if (client_fd == -1)
 		return -1;
 
 	char ip[INET6_ADDRSTRLEN];
+	std::memset(ip, 0, sizeof(ip));
+
 	if (client_addr.ss_family == AF_INET) {
-		struct sockaddr_in *s = (struct sockaddr_in *)&client_addr;
-		inet_ntop(AF_INET, &s->sin_addr, ip, sizeof(ip));
+		struct sockaddr_in *s = reinterpret_cast<sockaddr_in *>(&client_addr);
+		inet_ntop(AF_INET, &(s->sin_addr), ip, sizeof(ip));
 	} else {
-		struct sockaddr_in6 *s = (struct sockaddr_in6 *)&client_addr;
-		inet_ntop(AF_INET6, &s->sin6_addr, ip, sizeof(ip));
+		struct sockaddr_in6 *s = reinterpret_cast<sockaddr_in6 *>(&client_addr);
+		inet_ntop(AF_INET6, &(s->sin6_addr), ip, sizeof(ip));
 	}
 	ip_str = ip;
 

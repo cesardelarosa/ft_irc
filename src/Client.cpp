@@ -21,8 +21,10 @@ Client::~Client() {
  * @param data A pointer to the data to be appended.
  * @param nbytes The number of bytes to append.
  */
-void Client::addToBuffer(const char *data, int nbytes) {
-	this->_buffer.append(data, nbytes);
+void Client::addToBuffer(const char *data, ssize_t nbytes) {
+	if (nbytes < 0)
+		return;
+	this->_buffer.append(data, static_cast<size_t>(nbytes));
 }
 
 /**

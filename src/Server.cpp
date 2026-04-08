@@ -288,11 +288,11 @@ void Server::_handleNewConnection() {
  * @return true if the client was removed (index invalidated), false otherwise.
  */
 bool Server::_handleClientData(int client_fd) {
-	char buffer[512];
-	int  nbytes = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
+	char    buffer[512];
+	ssize_t nbytes = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
 
 	if (nbytes < 0) {
-		if (errno == EAGAIN || errno == EWOULDBLOCK)
+		if (errno == EAGAIN)
 			return false;
 		std::cerr << LOG_ERROR << "recv() failed for fd " << LOG_FD << client_fd
 		          << LOG_R << std::endl;
@@ -389,7 +389,7 @@ bool Server::_handleClientWrite(int client_fd) {
 	ssize_t            sent = send(client_fd, buf.c_str(), buf.length(), 0);
 
 	if (sent < 0) {
-		if (errno == EAGAIN || errno == EWOULDBLOCK)
+		if (errno == EAGAIN)
 			return false;
 		std::cerr << LOG_ERROR << "send() failed for fd " << LOG_FD << client_fd
 		          << LOG_R << std::endl;

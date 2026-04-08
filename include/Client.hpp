@@ -5,13 +5,14 @@
 
 #include "Socket.hpp"
 #include <string>
+#include <sys/types.h>
 
 class Client {
   public:
 	Client(int fd);
 	~Client();
 
-	void         addToBuffer(const char *data, int nbytes);
+	void         addToBuffer(const char *data, ssize_t nbytes);
 	std::string &getBuffer();
 
 	void               setNickname(const std::string &nick);
