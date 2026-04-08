@@ -8,6 +8,7 @@ OBJ_DIR = obj
 SRCS = $(addprefix $(SRC_DIR)/, \
             main.cpp \
 	    Server.cpp \
+		Socket.cpp \
 	    Client.cpp \
 	    Channel.cpp \
 	    CommandHandler.cpp \

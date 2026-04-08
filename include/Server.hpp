@@ -6,6 +6,7 @@
 #include "Channel.hpp"
 #include "Client.hpp"
 #include "CommandHandler.hpp"
+#include "Socket.hpp"
 #include <csignal>
 #include <map>
 #include <poll.h>
@@ -35,7 +36,7 @@ class Server {
   private:
 	int                              _port;
 	std::string                      _password;
-	int                              _server_fd;
+	Socket                           _serverSocket;
 	std::vector<struct pollfd>       _fds;
 	std::map<int, Client *>          _clients;
 	std::map<std::string, Channel *> _channels;

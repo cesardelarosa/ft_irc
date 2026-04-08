@@ -3,6 +3,7 @@
 #ifndef CLIENT_HPP
 #define CLIENT_HPP
 
+#include "Socket.hpp"
 #include <string>
 
 class Client {
@@ -41,7 +42,8 @@ class Client {
 	bool               hasPendingData() const;
 
   private:
-	int         _fd;
+	Socket _socket;
+
 	std::string _buffer;
 	std::string _send_buffer;
 

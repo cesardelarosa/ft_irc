@@ -18,7 +18,7 @@
  * @param password The password required for clients to connect.
  */
 Server::Server(int port, std::string password)
-    : _port(port), _password(password), _server_fd(-1), _commandHandler(this) {
+    : _port(port), _password(password), _commandHandler(this) {
 	std::cout << LOG_SERVER << "Server created on port: " << ANSI_BOLD
 	          << this->_port << LOG_R << std::endl;
 }
@@ -37,9 +37,6 @@ Server::~Server() {
 	         this->_channels.begin();
 	     it != this->_channels.end(); ++it) {
 		delete it->second;
-	}
-	if (this->_server_fd != -1) {
-		close(this->_server_fd);
 	}
 }
 
@@ -178,53 +175,10 @@ void Server::removeClientFromAllChannels(Client *client) {
  * @throw std::runtime_error if any socket operation fails.
  */
 void Server::_setupServerSocket() {
-	struct addrinfo hints, *res;
-	int             opt = 1;
-
-	std::memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_PASSIVE;
-
-	std::stringstream ss;
-	ss << this->_port;
-	std::string port_str = ss.str();
-
-	int status = getaddrinfo(NULL, port_str.c_str(), &hints, &res);
-	if (status != 0)
-		throw std::runtime_error(std::string("getaddrinfo: ") +
-		                         gai_strerror(status));
-
-	this->_server_fd =
-	    socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-	if (this->_server_fd == -1) {
-		freeaddrinfo(res);
-		throw std::runtime_error("Failed to create socket.");
-	}
-
-	if (setsockopt(this->_server_fd, SOL_SOCKET, SO_REUSEADDR, &opt,
-	               sizeof(opt)) == -1) {
-		freeaddrinfo(res);
-		throw std::runtime_error("Failed to set socket options.");
-	}
-
-	if (fcntl(this->_server_fd, F_SETFL, O_NONBLOCK) == -1) {
-		freeaddrinfo(res);
-		throw std::runtime_error("Failed to set socket to non-blocking.");
-	}
-
-	if (bind(this->_server_fd, res->ai_addr, res->ai_addrlen) == -1) {
-		freeaddrinfo(res);
-		throw std::runtime_error("Failed to bind to port.");
-	}
-
-	freeaddrinfo(res);
-
-	if (listen(this->_server_fd, 10) == -1)
-		throw std::runtime_error("Failed to listen on socket.");
+	this->_serverSocket.initServer(this->_port);
 
 	struct pollfd server_poll_fd;
-	server_poll_fd.fd = this->_server_fd;
+	server_poll_fd.fd = this->_serverSocket.get();
 	server_poll_fd.events = POLLIN;
 	server_poll_fd.revents = 0;
 	this->_fds.push_back(server_poll_fd);
@@ -285,30 +239,22 @@ void Server::_runEventLoop() {
  * @brief Handles a new client connection request.
  */
 void Server::_handleNewConnection() {
-	struct sockaddr_storage client_addr;
-	socklen_t               addr_len = sizeof(client_addr);
+	std::string ip_str;
+	int         client_fd = this->_serverSocket.acceptClient(ip_str);
 
-	int client_fd =
-	    accept(this->_server_fd, (struct sockaddr *)&client_addr, &addr_len);
 	if (client_fd == -1) {
 		std::cerr << LOG_WARN << "accept() failed." << std::endl;
 		return;
 	}
 
-	if (fcntl(client_fd, F_SETFL, O_NONBLOCK) == -1) {
-		std::cerr << LOG_WARN << "fcntl() failed on client fd." << std::endl;
+	Client *new_client;
+	try {
+		new_client = new Client(client_fd);
+		new_client->setHostname(ip_str);
+	} catch (std::bad_alloc &) {
+		std::cerr << LOG_ERROR << "Out of memory for new client" << std::endl;
 		close(client_fd);
 		return;
-	}
-
-	// Resolve client IP address using inet_ntop
-	char ip_str[INET6_ADDRSTRLEN];
-	if (client_addr.ss_family == AF_INET) {
-		struct sockaddr_in *s = (struct sockaddr_in *)&client_addr;
-		inet_ntop(AF_INET, &s->sin_addr, ip_str, sizeof(ip_str));
-	} else {
-		struct sockaddr_in6 *s = (struct sockaddr_in6 *)&client_addr;
-		inet_ntop(AF_INET6, &s->sin6_addr, ip_str, sizeof(ip_str));
 	}
 
 	struct pollfd client_poll_fd;
@@ -317,16 +263,6 @@ void Server::_handleNewConnection() {
 	client_poll_fd.revents = 0;
 	this->_fds.push_back(client_poll_fd);
 
-	Client *new_client;
-	try {
-		new_client = new Client(client_fd);
-	} catch (std::bad_alloc &) {
-		std::cerr << LOG_ERROR << "Out of memory for new client" << std::endl;
-		close(client_fd);
-		this->_fds.pop_back();
-		return;
-	}
-	new_client->setHostname(ip_str);
 	this->_clients.insert(std::make_pair(client_fd, new_client));
 
 	std::cout << LOG_CONNECT << ANSI_GREEN << "New connection" << LOG_R
@@ -418,7 +354,6 @@ void Server::_removeClient(size_t client_idx) {
 	delete this->_clients[client_fd];
 	this->_clients.erase(client_fd);
 
-	close(client_fd);
 	this->_fds.erase(this->_fds.begin() + client_idx);
 
 	std::cout << LOG_DISCONNECT << ANSI_DIM << "Client fd " << client_fd

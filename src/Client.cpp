@@ -4,7 +4,8 @@
  * @brief Constructs a new Client object.
  * @param fd The file descriptor of the client's socket.
  */
-Client::Client(int fd) : _fd(fd), _has_pass(false), _is_registered(false) {
+Client::Client(int fd) : _socket(fd), _has_pass(false), _is_registered(false) {
+	this->_socket.setNonBlocking();
 }
 
 /**
@@ -63,7 +64,7 @@ const std::string &Client::getHostname() const {
 }
 
 int Client::getFd() const {
-	return this->_fd;
+	return this->_socket.get();
 }
 
 void Client::setHasPass(bool value) {
