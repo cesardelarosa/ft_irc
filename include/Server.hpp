@@ -19,6 +19,7 @@ class Server {
 	Server(int port, std::string password);
 	~Server();
 
+	// Core operations
 	void start();
 	void sendReply(Client &client, const std::string &message);
 	void sendToClient(Client &client, const std::string &message);
@@ -27,7 +28,8 @@ class Server {
 	const std::string                &getPassword() const;
 	std::map<int, Client *>          &getClients();
 	std::map<std::string, Channel *> &getChannels();
-	Client  *getClientByNickname(const std::string &nick);
+	Client *getClientByNickname(const std::string &nick);
+	// Channel and Client management
 	Channel *getChannel(const std::string &name);
 	Channel *createChannel(const std::string &name);
 	void     removeChannel(const std::string &name);
@@ -43,17 +45,18 @@ class Server {
 	EventManager                     _eventManager;
 	CommandHandler                   _commandHandler;
 
+	// Connection Handlers
 	void _setupServerSocket();
 	void _runEventLoop();
 	void _handleNewConnection();
 	bool _handleClientData(int client_idx);
 	bool _handleClientWrite(int client_idx);
-	void _updatePollEvents();
-	void _removeClient(int client_idx);
 	void _processClientCommands(Client &client);
+	void _updatePollEvents();
 	void _checkTimeouts();
+	void _removeClient(int client_idx);
 
-	Server();
+	// Orthodoxy
 	Server(Server const &src);
 	Server &operator=(Server const &rhs);
 };

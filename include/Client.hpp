@@ -13,43 +13,41 @@ class Client {
 	Client(int fd);
 	~Client();
 
-	void         addToBuffer(const char *data, ssize_t nbytes);
-	std::string &getBuffer();
+	// Core operations
+	void addToBuffer(const char *data, ssize_t nbytes);
+	void queueMessage(const std::string &msg);
+	void clearSentBytes(size_t n);
+	void updateActivity();
+	void setDisconnected();
 
-	void               setNickname(const std::string &nick);
+	// Getters
 	const std::string &getNickname() const;
-	void               setUsername(const std::string &user);
 	const std::string &getUsername() const;
-	void               setRealname(const std::string &name);
 	const std::string &getRealname() const;
-	void               setHostname(const std::string &host);
 	const std::string &getHostname() const;
+	const std::string &getQuitReason() const;
+	const std::string &getSendBuffer() const;
+	std::string       &getBuffer();
+	std::string        getPrefix() const;
 	int                getFd() const;
+	time_t             getLastActivity() const;
 
-	// Registration state
+	// Setters
+	void setNickname(const std::string &nick);
+	void setUsername(const std::string &user);
+	void setRealname(const std::string &name);
+	void setHostname(const std::string &host);
+	void setQuitReason(const std::string &reason);
 	void setHasPass(bool value);
+	void setRegistered(bool value);
+
+	// State Checkers
 	bool hasPass() const;
 	bool hasNick() const;
 	bool hasUser() const;
-	void setRegistered(bool value);
 	bool isRegistered() const;
-
-	// Prefix for IRC messages
-	std::string getPrefix() const;
-
-	time_t getLastActivity() const;
-	void   updateActivity();
-
-	// Write buffer (POLLOUT)
-	void               queueMessage(const std::string &msg);
-	const std::string &getSendBuffer() const;
-	void               clearSentBytes(size_t n);
-	bool               hasPendingData() const;
-
-	bool               isDisconnected() const;
-	void               setDisconnected();
-	const std::string &getQuitReason() const;
-	void               setQuitReason(const std::string &reason);
+	bool hasPendingData() const;
+	bool isDisconnected() const;
 
   private:
 	Socket _socket;

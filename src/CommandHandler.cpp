@@ -512,7 +512,9 @@ void CommandHandler::_handleQuit(Client                         &client,
 	client.setDisconnected();
 }
 
-// handleInvite
+// ═══════════════════════════════════════════════════════════════
+//  INVITE
+// ═══════════════════════════════════════════════════════════════
 
 void CommandHandler::_handleInvite(Client                         &client,
                                    const std::vector<std::string> &args) {
@@ -561,7 +563,9 @@ void CommandHandler::_handleInvite(Client                         &client,
 	_server->sendToClient(*target, msg);
 }
 
-// handleTopic
+// ═══════════════════════════════════════════════════════════════
+//  TOPIC
+// ═══════════════════════════════════════════════════════════════
 
 void CommandHandler::_handleTopic(Client                         &client,
                                   const std::vector<std::string> &args) {
@@ -605,7 +609,9 @@ void CommandHandler::_handleTopic(Client                         &client,
 	channel->broadcastMessage(msg, NULL);
 }
 
-// handleMode
+// ═══════════════════════════════════════════════════════════════
+//  MODE
+// ═══════════════════════════════════════════════════════════════
 
 void CommandHandler::_handleMode(Client                         &client,
                                  const std::vector<std::string> &args) {
@@ -740,6 +746,9 @@ void CommandHandler::_applyModes(Client &client, Channel &channel,
 	}
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  KICK
+// ═══════════════════════════════════════════════════════════════
 void CommandHandler::_handleKick(Client                         &client,
                                  const std::vector<std::string> &args) {
 	if (args.size() < 2) {
@@ -806,7 +815,7 @@ void CommandHandler::_handleKick(Client                         &client,
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  PING / PONG / NOTICE
+//  PING
 // ═══════════════════════════════════════════════════════════════
 
 void CommandHandler::_handlePing(Client                         &client,
@@ -820,6 +829,9 @@ void CommandHandler::_handlePing(Client                         &client,
 	_server->sendToClient(client, msg);
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  PONG
+// ═══════════════════════════════════════════════════════════════
 void CommandHandler::_handlePong(Client                         &client,
                                  const std::vector<std::string> &args) {
 	(void)client;
@@ -828,6 +840,9 @@ void CommandHandler::_handlePong(Client                         &client,
 	// needed.
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  NOTICE
+// ═══════════════════════════════════════════════════════════════
 void CommandHandler::_handleNotice(Client                         &client,
                                    const std::vector<std::string> &args) {
 	if (args.empty() || args.size() < 2)
@@ -854,7 +869,7 @@ void CommandHandler::_handleNotice(Client                         &client,
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  CAP / WHOIS / LIST
+//  CAP
 // ═══════════════════════════════════════════════════════════════
 
 void CommandHandler::_handleCap(Client                         &client,
@@ -865,6 +880,9 @@ void CommandHandler::_handleCap(Client                         &client,
 	}
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  WHOIS
+// ═══════════════════════════════════════════════════════════════
 void CommandHandler::_handleWhois(Client                         &client,
                                   const std::vector<std::string> &args) {
 	if (args.empty()) {
@@ -892,6 +910,9 @@ void CommandHandler::_handleWhois(Client                         &client,
 	                   RPL_ENDOFWHOIS(client.getNickname(), targetNick));
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  LIST
+// ═══════════════════════════════════════════════════════════════
 void CommandHandler::_handleList(Client                         &client,
                                  const std::vector<std::string> &args) {
 	_server->sendReply(client, RPL_LISTSTART(client.getNickname()));

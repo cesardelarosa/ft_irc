@@ -40,7 +40,8 @@ Server::~Server() {
 }
 
 /**
- * @brief Starts the server's execution.
+ * @brief Starts the server by setting up the socket and entering the event
+ * loop.
  */
 void Server::start() {
 	_setupServerSocket();
@@ -48,9 +49,10 @@ void Server::start() {
 }
 
 /**
- * @brief Sends a server reply to a client by queueing it to their write buffer.
- * @param client The client to whom the reply should be sent.
- * @param message The content of the message to send.
+ * @brief Sends a standardized IRC reply to a client without modifying its queue
+ * logic directly.
+ * @param client The target client.
+ * @param message The reply string to send.
  */
 void Server::sendReply(Client &client, const std::string &message) {
 	std::string final_message =
@@ -59,9 +61,10 @@ void Server::sendReply(Client &client, const std::string &message) {
 }
 
 /**
- * @brief Sends a raw message to a client by queueing it to their write buffer.
- * @param client The client to send the message to.
- * @param message The raw message (must include \r\n if needed).
+ * @brief Directly appends a raw formatted message into the client's send
+ * buffer.
+ * @param client The target client.
+ * @param message The message to enqueue.
  */
 void Server::sendToClient(Client &client, const std::string &message) {
 	client.queueMessage(message);
@@ -186,8 +189,9 @@ void Server::_setupServerSocket() {
 }
 
 /**
- * @brief Runs the main event loop for the server.
- * @details Exits cleanly when g_shutdown is set (via SIGINT/SIGTERM).
+ * @brief Main execution loop polling read and write socket events.
+ * @details Exits cleanly when g_shutdown is set (via SIGINT/SIGTERM),
+ * manages timeouts and distributes interactions to discrete handlers.
  * @throw std::runtime_error if poll() fails for reasons other than a signal.
  */
 void Server::_runEventLoop() {
@@ -261,7 +265,8 @@ void Server::_runEventLoop() {
 }
 
 /**
- * @brief Handles a new client connection request.
+ * @brief Accepts a new client connection natively and registers it to the event
+ * manager.
  */
 void Server::_handleNewConnection() {
 	std::string ip_str;
@@ -293,9 +298,10 @@ void Server::_handleNewConnection() {
 }
 
 /**
- * @brief Handles incoming data from an existing client.
- * @param client_idx The index in the _fds vector.
- * @return true if the client was removed (index invalidated), false otherwise.
+ * @brief Reads available incoming data from a client socket and processes it.
+ * @param client_idx The index/fd of the client in the event manager.
+ * @return True if successful, false if the client disconnected gracefully or
+ * failed.
  */
 bool Server::_handleClientData(int client_fd) {
 	char    buffer[512];
@@ -346,8 +352,9 @@ bool Server::_handleClientData(int client_fd) {
 }
 
 /**
- * @brief Processes the command buffer for a client.
- * @param client The client whose buffer needs to be processed.
+ * @brief Slices the raw client buffer into distinct CRLF-delimited commands
+ * and passes them to the CommandHandler engine.
+ * @param client The client entity to process.
  */
 void Server::_processClientCommands(Client &client) {
 	std::string &buffer = client.getBuffer();
@@ -394,10 +401,9 @@ void Server::_removeClient(int client_fd) {
 }
 
 /**
- * @brief Handles writing pending data to a client socket.
- * @details Called when POLLOUT fires. Writes as much as possible and handles
- *          partial writes by keeping the unsent remainder in the buffer.
- * @param client_idx The index in the _fds vector.
+ * @brief Flushes the outbound buffer queue for a client.
+ * @param client_idx The index/fd of the client in the event manager.
+ * @return True if sending was successful, false if the connection dropped.
  */
 bool Server::_handleClientWrite(int client_fd) {
 	std::map<int, Client *>::iterator it = this->_clients.find(client_fd);
@@ -437,7 +443,8 @@ void Server::_updatePollEvents() {
 }
 
 /**
- * @brief Checks for client timeouts and sends pings to inactive clients.
+ * @brief Iterates over clients verifying inactivity bounds to fire pings or
+ * perform mass disconnections.
  */
 void Server::_checkTimeouts() {
 	time_t           now = std::time(NULL);
