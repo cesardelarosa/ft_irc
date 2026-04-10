@@ -52,3 +52,6 @@ ircserv
 # Compile information files
 *.json
 .cache
+
+# Utils
+*.txt
