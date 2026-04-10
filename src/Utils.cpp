@@ -1,7 +1,7 @@
 #include "Utils.hpp"
 
 /**
- * @brief Converts a string to IRC lowercase per RFC 1459.
+ * @brief Converts a string to IRC lowercase per RFC 2812.
  * @details In addition to standard A-Z -> a-z, the following mappings apply:
  *          [ -> {, ] -> }, \\ -> |, ~ -> ^
  * @param str The string to convert.
