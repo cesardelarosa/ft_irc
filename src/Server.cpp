@@ -272,6 +272,12 @@ void Server::_handleNewConnection() {
 	std::string ip_str;
 	int         client_fd = this->_serverSocket.acceptClient(ip_str);
 
+	if (client_fd == -2) {
+		std::cerr << LOG_WARN << "Connection rejected: Only IPv4 is supported."
+		          << std::endl;
+		return;
+	}
+
 	if (client_fd == -1) {
 		std::cerr << LOG_WARN << "accept() failed." << std::endl;
 		return;

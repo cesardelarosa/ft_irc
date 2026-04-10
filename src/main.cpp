@@ -1,6 +1,7 @@
 #include "Server.hpp"
 #include <csignal>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 
 volatile sig_atomic_t g_shutdown = 0;
@@ -21,18 +22,16 @@ static void signalHandler(int signum) {
  */
 static void setupSignals() {
 	struct sigaction sa;
-	sigemptyset(&sa.sa_mask);
-	sigaddset(&sa.sa_mask, SIGINT);
-	sigaddset(&sa.sa_mask, SIGTERM);
+
+	std::memset(&sa, 0, sizeof(sa));
 	sa.sa_handler = signalHandler;
-	sa.sa_flags = 0;
 	sigaction(SIGINT, &sa, NULL);
 	sigaction(SIGTERM, &sa, NULL);
 
 	struct sigaction sa_pipe;
-	sigemptyset(&sa_pipe.sa_mask);
+
+	std::memset(&sa_pipe, 0, sizeof(sa_pipe));
 	sa_pipe.sa_handler = SIG_IGN;
-	sa_pipe.sa_flags = 0;
 	sigaction(SIGPIPE, &sa_pipe, NULL);
 }
 

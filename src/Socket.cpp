@@ -46,8 +46,7 @@ void Socket::initServer(int port) {
 
 	int status = getaddrinfo(NULL, ss.str().c_str(), &hints, &res);
 	if (status != 0)
-		throw std::runtime_error(std::string("getaddrinfo: ") +
-		                         gai_strerror(status));
+		throw std::runtime_error("Failed to resolve host address");
 
 	struct addrinfo *p;
 	for (p = res; p != NULL; p = p->ai_next) {
@@ -95,24 +94,15 @@ int Socket::acceptClient(std::string &ip_str) {
 
 	int client_fd = accept(
 	    this->_fd, reinterpret_cast<sockaddr *>(&client_addr), &addr_len);
-
 	if (client_fd == -1)
 		return -1;
 
-	char ip[INET6_ADDRSTRLEN];
-	std::memset(ip, 0, sizeof(ip));
-
 	if (client_addr.ss_family == AF_INET) {
 		struct sockaddr_in *s = reinterpret_cast<sockaddr_in *>(&client_addr);
-		inet_ntop(AF_INET, &(s->sin_addr), ip, sizeof(ip));
-	} else if (client_addr.ss_family == AF_INET6) {
-		struct sockaddr_in6 *s = reinterpret_cast<sockaddr_in6 *>(&client_addr);
-		inet_ntop(AF_INET6, &(s->sin6_addr), ip, sizeof(ip));
-	} else {
-		close(client_fd);
-		return -1;
+		ip_str = inet_ntoa(s->sin_addr);
+		return client_fd;
 	}
-	ip_str = ip;
 
-	return client_fd;
+	close(client_fd);
+	return -2;
 }
