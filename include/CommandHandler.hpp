@@ -10,6 +10,7 @@
 
 class Server;
 class Client;
+class Channel;
 
 class CommandHandler {
   public:
@@ -39,6 +40,19 @@ class CommandHandler {
 	void _handlePart(Client &client, const std::vector<std::string> &args);
 	void _handlePrivmsg(Client &client, const std::vector<std::string> &args);
 	void _handleQuit(Client &client, const std::vector<std::string> &args);
+	
+	//invite,topic,mode
+	void _handleInvite(Client &client, const std::vector<std::string> &args);
+	void _handleTopic(Client &client, const std::vector<std::string> &args);
+	void _handleMode(Client &client, const std::vector<std::string> &args);
+
+	// helper
+	void _applyModes(Client &client, Channel &channel,
+                 const std::string &modes,
+                 const std::vector<std::string> &params,
+                 size_t paramIndex);
+	
+	void _handleKick(Client &client, const std::vector<std::string> &args);
 
 	CommandHandler();
 	CommandHandler(CommandHandler const &src);

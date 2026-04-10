@@ -18,6 +18,10 @@ CommandHandler::CommandHandler(Server *server) : _server(server) {
 	this->_commands["PART"] = &CommandHandler::_handlePart;
 	this->_commands["PRIVMSG"] = &CommandHandler::_handlePrivmsg;
 	this->_commands["QUIT"] = &CommandHandler::_handleQuit;
+	this->_commands["INVITE"] = &CommandHandler::_handleInvite;
+	this->_commands["TOPIC"]  = &CommandHandler::_handleTopic;
+	this->_commands["MODE"]   = &CommandHandler::_handleMode;
+	this->_commands["KICK"] = &CommandHandler::_handleKick;
 }
 
 CommandHandler::~CommandHandler() {
@@ -80,7 +84,8 @@ void CommandHandler::_parseAndExecute(Client            &client,
 	// 4. Block commands from unregistered clients (except PASS, NICK, USER)
 	if (!client.isRegistered() && command != "PASS" && command != "NICK" &&
 	    command != "USER" && command != "QUIT") {
-		_server->sendReply(client, ERR_NOTREGISTERED);
+		//_server->sendReply(client, ERR_NOTREGISTERED);
+		_server->sendReply(client, ERR_NOTREGISTERED(client.getNickname()));
 		return;
 	}
 
@@ -92,7 +97,8 @@ void CommandHandler::_parseAndExecute(Client            &client,
 		(this->*(it->second))(client, args);
 	} else {
 		if (client.isRegistered()) {
-			_server->sendReply(client, ERR_UNKNOWNCOMMAND(command));
+			//_server->sendReply(client, ERR_UNKNOWNCOMMAND(command));
+			_server->sendReply(client, ERR_UNKNOWNCOMMAND(client.getNickname(), command));
 		}
 	}
 }
@@ -127,7 +133,8 @@ void CommandHandler::_tryRegister(Client &client) {
 void CommandHandler::_handlePass(Client                         &client,
                                  const std::vector<std::string> &args) {
 	if (client.isRegistered()) {
-		_server->sendReply(client, ERR_ALREADYREGISTRED);
+		//_server->sendReply(client, ERR_ALREADYREGISTRED);
+		_server->sendReply(client, ERR_ALREADYREGISTRED(client.getNickname()));
 		return;
 	}
 	if (args.empty()) {
@@ -135,7 +142,8 @@ void CommandHandler::_handlePass(Client                         &client,
 		return;
 	}
 	if (args[0] != _server->getPassword()) {
-		_server->sendReply(client, ERR_PASSWDMISMATCH);
+		//_server->sendReply(client, ERR_PASSWDMISMATCH);
+		_server->sendReply(client, ERR_PASSWDMISMATCH(client.getNickname()));
 		return;
 	}
 
@@ -220,7 +228,8 @@ void CommandHandler::_handleNick(Client                         &client,
 void CommandHandler::_handleUser(Client                         &client,
                                  const std::vector<std::string> &args) {
 	if (client.isRegistered()) {
-		_server->sendReply(client, ERR_ALREADYREGISTRED);
+		//_server->sendReply(client, ERR_ALREADYREGISTRED);
+		_server->sendReply(client, ERR_ALREADYREGISTRED(client.getNickname()));
 		return;
 	}
 	if (args.size() < 4) {
@@ -456,4 +465,278 @@ void CommandHandler::_handleQuit(Client                         &client,
 	std::string error_msg = "ERROR :Closing Link: " + client.getNickname() +
 	                        " (Quit: " + reason + ")\r\n";
 	_server->sendToClient(client, error_msg);
+}
+
+//handleInvite
+
+void CommandHandler::_handleInvite(Client &client,
+                                   const std::vector<std::string> &args)
+{
+    if (args.size() < 2)
+    {
+        _server->sendReply(client, ERR_NEEDMOREPARAMS("INVITE"));
+        return;
+    }
+
+    std::string targetNick = args[0];
+    std::string channelName = args[1];
+
+    Channel *channel = _server->getChannel(channelName);
+    if (!channel)
+    {
+        _server->sendReply(client,
+            ERR_NOSUCHCHANNEL(client.getNickname(), channelName));
+        return;
+    }
+
+    if (!channel->isMember(&client))
+    {
+        _server->sendReply(client,
+            ERR_NOTONCHANNEL(client.getNickname(), channelName));
+        return;
+    }
+
+    if (channel->isInviteOnly() && !channel->isOperator(&client))
+    {
+        _server->sendReply(client,
+            ERR_CHANOPRIVSNEEDED(client.getNickname(), channelName));
+        return;
+    }
+
+    Client *target = _server->getClientByNickname(targetNick);
+    if (!target)
+    {
+        _server->sendReply(client,
+            ERR_NOSUCHNICK(client.getNickname(), targetNick));
+        return;
+    }
+
+    channel->addInvited(targetNick);
+
+    // reply al emisor
+    _server->sendReply(client,
+        RPL_INVITING(client.getNickname(), targetNick, channelName));
+
+    // mensaje al target
+    std::string msg = ":" + client.getPrefix() +
+                      " INVITE " + targetNick +
+                      " :" + channelName + "\r\n";
+
+    _server->sendToClient(*target, msg);
+}
+
+//handleTopic
+
+void CommandHandler::_handleTopic(Client &client,
+                                  const std::vector<std::string> &args)
+{
+    if (args.empty())
+    {
+        _server->sendReply(client, ERR_NEEDMOREPARAMS("TOPIC"));
+        return;
+    }
+
+    std::string channelName = args[0];
+    Channel *channel = _server->getChannel(channelName);
+
+    if (!channel)
+    {
+        _server->sendReply(client,
+            ERR_NOSUCHCHANNEL(client.getNickname(), channelName));
+        return;
+    }
+
+    // solo consulta
+    if (args.size() == 1)
+    {
+        if (channel->getTopic().empty())
+            _server->sendReply(client,
+                RPL_NOTOPIC(client.getNickname(), channelName));
+        else
+            _server->sendReply(client,
+                RPL_TOPIC(client.getNickname(), channelName,
+                          channel->getTopic()));
+        return;
+    }
+
+    // cambia el topic
+    if (channel->isTopicRestricted() && !channel->isOperator(&client))
+    {
+        _server->sendReply(client,
+            ERR_CHANOPRIVSNEEDED(client.getNickname(), channelName));
+        return;
+    }
+
+    std::string newTopic = args[1];
+    channel->setTopic(newTopic);
+
+    std::string msg = ":" + client.getPrefix() +
+                      " TOPIC " + channelName +
+                      " :" + newTopic;
+
+    channel->broadcastMessage(msg, NULL);
+}
+
+//handleMode
+
+void CommandHandler::_handleMode(Client &client,
+                                 const std::vector<std::string> &args)
+{
+    if (args.empty())
+    {
+        _server->sendReply(client, ERR_NEEDMOREPARAMS("MODE"));
+        return;
+    }
+
+    std::string channelName = args[0];
+    Channel *channel = _server->getChannel(channelName);
+
+    if (!channel)
+    {
+        _server->sendReply(client,
+            ERR_NOSUCHCHANNEL(client.getNickname(), channelName));
+        return;
+    }
+
+    // solo hace la consulta
+    if (args.size() == 1)
+    {
+        std::string modes = "+";
+        if (channel->isInviteOnly()) modes += "i";
+        if (channel->isTopicRestricted()) modes += "t";
+
+        _server->sendReply(client,
+            "324 " + client.getNickname() + " " + channelName + " " + modes);
+        return;
+    }
+
+    // solo los operadores pueden cambiar modos
+    if (!channel->isOperator(&client))
+    {
+        _server->sendReply(client,
+            ERR_CHANOPRIVSNEEDED(client.getNickname(), channelName));
+        return;
+    }
+
+    std::string modes = args[1];
+
+    std::vector<std::string> params;
+    if (args.size() > 2)
+        params.insert(params.begin(), args.begin() + 2, args.end());
+
+    _applyModes(client, *channel, modes, params, 0);
+}
+
+void CommandHandler::_applyModes(Client &client, Channel &channel,
+                                const std::string &modes,
+                                const std::vector<std::string> &params,
+                                size_t paramIndex)
+{
+    bool adding = true;
+
+    for (size_t i = 0; i < modes.size(); i++)
+    {
+        char c = modes[i];
+
+        if (c == '+') { adding = true; continue; }
+        if (c == '-') { adding = false; continue; }
+
+        if (c == 'i')
+        {
+            channel.setInviteOnly(adding);
+        }
+        else if (c == 't')
+        {
+            channel.setTopicRestricted(adding);
+        }
+        else if (c == 'o')
+        {
+            if (paramIndex >= params.size())
+                return;
+
+            Client *target =
+                _server->getClientByNickname(params[paramIndex++]);
+
+            if (!target || !channel.isMember(target))
+                continue;
+
+            if (adding)
+                channel.addOperator(target);
+            else
+                channel.removeOperator(target);
+        }
+        else if (c == 'k')
+        {
+            if (adding)
+            {
+                if (paramIndex >= params.size())
+                    return;
+
+                channel.setKey(params[paramIndex++]);
+            }
+            else
+                channel.removeKey();
+        }
+    }
+
+    std::string msg = ":" + client.getPrefix() +
+                      " MODE " + channel.getName() +
+                      " " + modes;
+
+    channel.broadcastMessage(msg, NULL);
+}
+
+void CommandHandler::_handleKick(Client &client,
+                                 const std::vector<std::string> &args)
+{
+    if (args.size() < 2)
+    {
+        _server->sendReply(client, ERR_NEEDMOREPARAMS("KICK"));
+		//_server->sendReply(client, ERR_NEEDMOREPARAMS(client.getNickname(), "KICK"));
+        return;
+    }
+
+    std::string channelName = args[0];
+    std::string targetNick = args[1];
+    std::string reason = (args.size() > 2) ? args[2] : client.getNickname();
+
+    Channel *channel = _server->getChannel(channelName);
+    if (!channel)
+    {
+        _server->sendReply(client,
+            ERR_NOSUCHCHANNEL(client.getNickname(), channelName));
+        return;
+    }
+
+    // debe ser operador
+    if (!channel->isOperator(&client))
+    {
+        _server->sendReply(client,
+            ERR_CHANOPRIVSNEEDED(client.getNickname(), channelName));
+        return;
+    }
+
+    Client *target = _server->getClientByNickname(targetNick);
+    if (!target || !channel->isMember(target))
+    {
+        _server->sendReply(client,
+            ERR_USERNOTINCHANNEL(client.getNickname(), targetNick, channelName));
+        return;
+    }
+
+    // mensaje KICK
+    std::string msg = ":" + client.getPrefix() +
+                      " KICK " + channelName +
+                      " " + targetNick +
+                      " :" + reason;
+
+    // broadcast antes de eliminar
+    channel->broadcastMessage(msg, NULL);
+
+    // eliminar usuario
+    channel->removeMember(target);
+
+    // borrar canal si queda vacío
+    if (channel->isEmpty())
+        _server->removeChannel(channelName);
 }
