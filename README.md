@@ -24,7 +24,7 @@ El objetivo de esta fase es someter el servidor a pruebas de estrés para garant
 ### 1. Auditoría y Pruebas de Estrés
 Utilizar valgrind para detectar fugas de memoria y segfaults en una terminal:
 ``` bash
-valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes ./ircserv 6667 <password>
+valgrind --leak-check=full --show-leak-kinds=all --track-fds=yes --track-origins=yes ./ircserv 6667 <password>
 ```
 Mientras que en otra(s) utilizamos netcat para intentar romper el servidor:
  ``` bash
