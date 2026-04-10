@@ -30,6 +30,24 @@
 #define RPL_ENDOFINVITELIST(nick, channel) \
 	"337 " + nick + " " + channel + " :End of INVITE list"
 
+// WHOIS
+#define RPL_WHOISUSER(nick, target, user, host, realname) \
+	"311 " + nick + " " + target + " " + user + " " + host + " * :" + realname
+
+#define RPL_WHOISSERVER(nick, target, server, serverinfo) \
+	"312 " + nick + " " + target + " " + server + " :" + serverinfo
+
+#define RPL_ENDOFWHOIS(nick, target) \
+	"318 " + nick + " " + target + " :End of /WHOIS list"
+
+// LIST
+#define RPL_LISTSTART(nick) "321 " + nick + " Channel :Users  Name"
+
+#define RPL_LIST(nick, channel, count, topic) \
+	"322 " + nick + " " + channel + " " + count + " :" + topic
+
+#define RPL_LISTEND(nick) "323 " + nick + " :End of /LIST"
+
 // ──────────────────────────── ERRORS ─────────────────────────────
 
 // GENERAL

@@ -62,7 +62,14 @@ void Socket::initServer(int port) {
 			continue;
 		}
 
-		setNonBlocking();
+		try {
+			setNonBlocking();
+		} catch (...) {
+			close(this->_fd);
+			this->_fd = -1;
+			freeaddrinfo(res);
+			throw;
+		}
 
 		if (bind(this->_fd, p->ai_addr, p->ai_addrlen) == 0) {
 			break; /* Success */
@@ -98,9 +105,12 @@ int Socket::acceptClient(std::string &ip_str) {
 	if (client_addr.ss_family == AF_INET) {
 		struct sockaddr_in *s = reinterpret_cast<sockaddr_in *>(&client_addr);
 		inet_ntop(AF_INET, &(s->sin_addr), ip, sizeof(ip));
-	} else {
+	} else if (client_addr.ss_family == AF_INET6) {
 		struct sockaddr_in6 *s = reinterpret_cast<sockaddr_in6 *>(&client_addr);
 		inet_ntop(AF_INET6, &(s->sin6_addr), ip, sizeof(ip));
+	} else {
+		close(client_fd);
+		return -1;
 	}
 	ip_str = ip;
 

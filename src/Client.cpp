@@ -8,7 +8,7 @@ Client::Client(int fd)
     : _socket(fd), _buffer(), _send_buffer(),
       _quit_reason("Client disconnected"), _nickname(), _username(),
       _realname(), _hostname(), _has_pass(false), _is_registered(false),
-      _disconnected(false) {
+      _disconnected(false), _last_activity(std::time(NULL)) {
 	this->_socket.setNonBlocking();
 }
 
@@ -106,9 +106,22 @@ std::string Client::getPrefix() const {
 	return this->_nickname + "!" + this->_username + "@" + host;
 }
 
+time_t Client::getLastActivity() const {
+	return this->_last_activity;
+}
+
+void Client::updateActivity() {
+	this->_last_activity = std::time(NULL);
+}
+
 // ──────────────────────────── Write buffer ───────────────────────
 
 void Client::queueMessage(const std::string &msg) {
+	if (this->_send_buffer.size() + msg.size() > 65536) {
+		this->_disconnected = true;
+		this->_quit_reason = "SendQ Exceeded";
+		return;
+	}
 	this->_send_buffer += msg;
 }
 

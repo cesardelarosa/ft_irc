@@ -4,6 +4,7 @@
 #define CLIENT_HPP
 
 #include "Socket.hpp"
+#include <ctime>
 #include <string>
 #include <sys/types.h>
 
@@ -36,6 +37,9 @@ class Client {
 	// Prefix for IRC messages
 	std::string getPrefix() const;
 
+	time_t getLastActivity() const;
+	void   updateActivity();
+
 	// Write buffer (POLLOUT)
 	void               queueMessage(const std::string &msg);
 	const std::string &getSendBuffer() const;
@@ -61,6 +65,7 @@ class Client {
 	bool        _has_pass;
 	bool        _is_registered;
 	bool        _disconnected;
+	time_t      _last_activity;
 
 	Client();
 	Client(Client const &src);

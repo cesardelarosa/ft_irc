@@ -51,6 +51,7 @@ class Server {
 	void _updatePollEvents();
 	void _removeClient(int client_idx);
 	void _processClientCommands(Client &client);
+	void _checkTimeouts();
 
 	Server();
 	Server(Server const &src);

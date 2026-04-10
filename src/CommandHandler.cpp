@@ -23,6 +23,12 @@ CommandHandler::CommandHandler(Server *server) : _server(server), _commands() {
 	this->_commands["TOPIC"] = &CommandHandler::_handleTopic;
 	this->_commands["MODE"] = &CommandHandler::_handleMode;
 	this->_commands["KICK"] = &CommandHandler::_handleKick;
+	this->_commands["PING"] = &CommandHandler::_handlePing;
+	this->_commands["PONG"] = &CommandHandler::_handlePong;
+	this->_commands["NOTICE"] = &CommandHandler::_handleNotice;
+	this->_commands["CAP"] = &CommandHandler::_handleCap;
+	this->_commands["WHOIS"] = &CommandHandler::_handleWhois;
+	this->_commands["LIST"] = &CommandHandler::_handleList;
 }
 
 CommandHandler::~CommandHandler() {
@@ -50,6 +56,21 @@ void CommandHandler::_parseAndExecute(Client            &client,
 	std::string line = raw_command;
 	std::string trailing;
 	bool        has_trailing = false;
+
+	if (!line.empty() && line[0] == ':') {
+		size_t prefix_end = line.find(' ');
+		if (prefix_end != std::string::npos) {
+			line.erase(0, prefix_end + 1);
+		} else {
+			return;
+		}
+	}
+
+	while (!line.empty() && line[0] == ' ') {
+		line.erase(0, 1);
+	}
+	if (line.empty())
+		return;
 
 	// 1. Extract trailing argument (prefixed with ' :')
 	size_t colon_pos = line.find(" :");
@@ -82,9 +103,10 @@ void CommandHandler::_parseAndExecute(Client            &client,
 		args.push_back(trailing);
 	}
 
-	// 4. Block commands from unregistered clients (except PASS, NICK, USER)
+	// 4. Block commands from unregistered clients
 	if (!client.isRegistered() && command != "PASS" && command != "NICK" &&
-	    command != "USER" && command != "QUIT") {
+	    command != "USER" && command != "QUIT" && command != "CAP" &&
+	    command != "PING" && command != "PONG") {
 		_server->sendReply(client, ERR_NOTREGISTERED(client.getNickname()));
 		return;
 	}
@@ -603,13 +625,25 @@ void CommandHandler::_handleMode(Client                         &client,
 
 	if (args.size() == 1) {
 		std::string modes = "+";
+		std::string modes_params = "";
 		if (channel->isInviteOnly())
 			modes += "i";
 		if (channel->isTopicRestricted())
 			modes += "t";
+		if (channel->hasKey()) {
+			modes += "k";
+			modes_params += " " + channel->getKey();
+		}
+		if (channel->hasUserLimit()) {
+			modes += "l";
+			std::stringstream ss;
+			ss << channel->getUserLimit();
+			modes_params += " " + ss.str();
+		}
 
 		_server->sendReply(client, "324 " + client.getNickname() + " " +
-		                               channelName + " " + modes);
+		                               channelName + " " + modes +
+		                               modes_params);
 		return;
 	}
 
@@ -663,13 +697,19 @@ void CommandHandler::_applyModes(Client &client, Channel &channel,
 			} else if (!adding) {
 				channel.removeKey();
 				applied_modes += 'k';
+				if (paramIndex < params.size()) {
+					applied_params += " " + params[paramIndex++];
+				}
 			}
 		} else if (c == 'l') {
 			if (adding && paramIndex < params.size()) {
-				channel.setUserLimit(
-				    static_cast<size_t>(std::atoi(params[paramIndex].c_str())));
-				applied_modes += 'l';
-				applied_params += " " + params[paramIndex++];
+				long limit = std::atol(params[paramIndex].c_str());
+				if (limit > 0) {
+					channel.setUserLimit(static_cast<size_t>(limit));
+					applied_modes += 'l';
+					applied_params += " " + params[paramIndex];
+				}
+				paramIndex++;
 			} else if (!adding) {
 				channel.removeUserLimit();
 				applied_modes += 'l';
@@ -707,38 +747,169 @@ void CommandHandler::_handleKick(Client                         &client,
 		return;
 	}
 
-	std::string channelName = args[0];
-	std::string targetNick = args[1];
+	std::string channelNamesStr = args[0];
+	std::string targetNicksStr = args[1];
 	std::string reason = (args.size() > 2) ? args[2] : client.getNickname();
 
-	Channel *channel = _server->getChannel(channelName);
-	if (!channel) {
-		_server->sendReply(
-		    client, ERR_NOSUCHCHANNEL(client.getNickname(), channelName));
+	std::vector<std::string> channels;
+	std::stringstream        ssChan(channelNamesStr);
+	std::string              t;
+	while (std::getline(ssChan, t, ',')) {
+		if (!t.empty())
+			channels.push_back(t);
+	}
+
+	std::vector<std::string> targets;
+	std::stringstream        ssTarg(targetNicksStr);
+	while (std::getline(ssTarg, t, ',')) {
+		if (!t.empty())
+			targets.push_back(t);
+	}
+
+	if (channels.empty() || targets.empty())
+		return;
+
+	bool multiple_channels = (channels.size() > 1);
+	for (size_t j = 0; j < targets.size(); ++j) {
+		std::string targetNick = targets[j];
+		std::string channelName = multiple_channels && j < channels.size()
+		                              ? channels[j]
+		                              : channels[0];
+
+		Channel *channel = _server->getChannel(channelName);
+		if (!channel) {
+			_server->sendReply(
+			    client, ERR_NOSUCHCHANNEL(client.getNickname(), channelName));
+			continue;
+		}
+		if (!channel->isOperator(&client)) {
+			_server->sendReply(client, ERR_CHANOPRIVSNEEDED(
+			                               client.getNickname(), channelName));
+			continue;
+		}
+
+		Client *target = _server->getClientByNickname(targetNick);
+		if (!target || !channel->isMember(target)) {
+			_server->sendReply(client,
+			                   ERR_USERNOTINCHANNEL(client.getNickname(),
+			                                        targetNick, channelName));
+			continue;
+		}
+
+		std::string msg = ":" + client.getPrefix() + " KICK " + channelName +
+		                  " " + targetNick + " :" + reason;
+		channel->broadcastMessage(msg, NULL);
+		channel->removeMember(target);
+		if (channel->isEmpty())
+			_server->removeChannel(channelName);
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PING / PONG / NOTICE
+// ═══════════════════════════════════════════════════════════════
+
+void CommandHandler::_handlePing(Client                         &client,
+                                 const std::vector<std::string> &args) {
+	if (args.empty()) {
+		_server->sendReply(client, ERR_NEEDMOREPARAMS("PING"));
+		return;
+	}
+	std::string msg =
+	    ":" + std::string("ircserv") + " PONG ircserv :" + args[0] + "\r\n";
+	_server->sendToClient(client, msg);
+}
+
+void CommandHandler::_handlePong(Client                         &client,
+                                 const std::vector<std::string> &args) {
+	(void)client;
+	(void)args;
+	// PONG activity update happens on network recv automatically, no action
+	// needed.
+}
+
+void CommandHandler::_handleNotice(Client                         &client,
+                                   const std::vector<std::string> &args) {
+	if (args.empty() || args.size() < 2)
+		return;
+
+	std::string target = args[0];
+	std::string text = args[1];
+
+	if (target[0] == '#' || target[0] == '&') {
+		Channel *channel = _server->getChannel(target);
+		if (channel && channel->isMember(&client)) {
+			channel->broadcastMessage(":" + client.getPrefix() + " NOTICE " +
+			                              target + " :" + text,
+			                          &client);
+		}
+	} else {
+		Client *target_client = _server->getClientByNickname(target);
+		if (target_client) {
+			std::string msg = ":" + client.getPrefix() + " NOTICE " + target +
+			                  " :" + text + "\r\n";
+			_server->sendToClient(*target_client, msg);
+		}
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CAP / WHOIS / LIST
+// ═══════════════════════════════════════════════════════════════
+
+void CommandHandler::_handleCap(Client                         &client,
+                                const std::vector<std::string> &args) {
+	if (!args.empty() && args[0] == "LS") {
+		std::string msg = ":" + std::string("ircserv") + " CAP * LS :\r\n";
+		_server->sendToClient(client, msg);
+	}
+}
+
+void CommandHandler::_handleWhois(Client                         &client,
+                                  const std::vector<std::string> &args) {
+	if (args.empty()) {
+		_server->sendReply(client, ERR_NONICKNAMEGIVEN(client.getNickname()));
 		return;
 	}
 
-	if (!channel->isOperator(&client)) {
-		_server->sendReply(
-		    client, ERR_CHANOPRIVSNEEDED(client.getNickname(), channelName));
-		return;
-	}
+	std::string targetNick = args[0];
+	Client     *target = _server->getClientByNickname(targetNick);
 
-	Client *target = _server->getClientByNickname(targetNick);
-	if (!target || !channel->isMember(target)) {
+	if (!target) {
 		_server->sendReply(client,
-		                   ERR_USERNOTINCHANNEL(client.getNickname(),
-		                                        targetNick, channelName));
+		                   ERR_NOSUCHNICK(client.getNickname(), targetNick));
 		return;
 	}
 
-	std::string msg = ":" + client.getPrefix() + " KICK " + channelName + " " +
-	                  targetNick + " :" + reason;
+	_server->sendReply(client, RPL_WHOISUSER(client.getNickname(), targetNick,
+	                                         target->getUsername(),
+	                                         target->getHostname(),
+	                                         target->getRealname()));
+	_server->sendReply(client, RPL_WHOISSERVER(client.getNickname(), targetNick,
+	                                           std::string("ircserv"),
+	                                           std::string("ft_irc server")));
+	_server->sendReply(client,
+	                   RPL_ENDOFWHOIS(client.getNickname(), targetNick));
+}
 
-	channel->broadcastMessage(msg, NULL);
+void CommandHandler::_handleList(Client                         &client,
+                                 const std::vector<std::string> &args) {
+	_server->sendReply(client, RPL_LISTSTART(client.getNickname()));
 
-	channel->removeMember(target);
+	std::map<std::string, Channel *> &channels = _server->getChannels();
+	for (std::map<std::string, Channel *>::iterator it = channels.begin();
+	     it != channels.end(); ++it) {
+		Channel *channel = it->second;
 
-	if (channel->isEmpty())
-		_server->removeChannel(channelName);
+		if (!args.empty() && args[0] != channel->getName())
+			continue;
+
+		std::stringstream ss;
+		ss << channel->getMemberCount();
+		_server->sendReply(client,
+		                   RPL_LIST(client.getNickname(), channel->getName(),
+		                            ss.str(), channel->getTopic()));
+	}
+
+	_server->sendReply(client, RPL_LISTEND(client.getNickname()));
 }

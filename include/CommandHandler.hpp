@@ -44,11 +44,16 @@ class CommandHandler {
 	void _handleInvite(Client &client, const std::vector<std::string> &args);
 	void _handleTopic(Client &client, const std::vector<std::string> &args);
 	void _handleMode(Client &client, const std::vector<std::string> &args);
+	void _handleKick(Client &client, const std::vector<std::string> &args);
+	void _handlePing(Client &client, const std::vector<std::string> &args);
+	void _handlePong(Client &client, const std::vector<std::string> &args);
+	void _handleNotice(Client &client, const std::vector<std::string> &args);
+	void _handleCap(Client &client, const std::vector<std::string> &args);
+	void _handleWhois(Client &client, const std::vector<std::string> &args);
+	void _handleList(Client &client, const std::vector<std::string> &args);
 
 	void _applyModes(Client &client, Channel &channel, const std::string &modes,
 	                 const std::vector<std::string> &params, size_t paramIndex);
-
-	void _handleKick(Client &client, const std::vector<std::string> &args);
 
 	CommandHandler();
 	CommandHandler(CommandHandler const &src);

@@ -207,13 +207,21 @@ void Server::_runEventLoop() {
 	          << std::endl;
 	std::cout << std::endl;
 
+	time_t last_timeout_check = std::time(NULL);
+
 	while (!g_shutdown) {
 		_updatePollEvents();
 
-		if (this->_eventManager.waitEvents(-1) == -1) {
+		if (this->_eventManager.waitEvents(5000) == -1) {
 			if (errno == EINTR)
 				break;
 			throw std::runtime_error("poll() failed.");
+		}
+
+		time_t now = std::time(NULL);
+		if (now - last_timeout_check >= 10) {
+			_checkTimeouts();
+			last_timeout_check = now;
 		}
 
 		if (this->_eventManager.getRevents(0) & POLLIN)
@@ -268,13 +276,14 @@ void Server::_handleNewConnection() {
 	try {
 		new_client = new Client(client_fd);
 		new_client->setHostname(ip_str);
-		this->_clients.insert(std::make_pair(client_fd, new_client));
 		this->_eventManager.addSocket(client_fd, POLLIN);
+		this->_clients.insert(std::make_pair(client_fd, new_client));
 	} catch (const std::exception &) {
 		std::cerr << LOG_ERROR << "Out of memory for new client" << std::endl;
 		if (new_client)
 			delete new_client;
-		close(client_fd);
+		else
+			close(client_fd);
 		return;
 	}
 
@@ -312,6 +321,7 @@ bool Server::_handleClientData(int client_fd) {
 	buffer[nbytes] = '\0';
 	std::map<int, Client *>::iterator it = this->_clients.find(client_fd);
 	if (it != this->_clients.end()) {
+		it->second->updateActivity();
 		it->second->addToBuffer(buffer, nbytes);
 
 		if (it->second->getBuffer().size() > 4096) {
@@ -347,11 +357,19 @@ void Server::_processClientCommands(Client &client) {
 		std::string command_line = buffer.substr(0, pos);
 		buffer.erase(0, pos + 2);
 
+		if (command_line.length() > 510) {
+			command_line = command_line.substr(0, 510);
+		}
+
 		if (!command_line.empty()) {
 			std::cout << LOG_CMD << LOG_FD << "fd " << client.getFd() << LOG_R
 			          << " " << ANSI_BRIGHT_WHITE << command_line << LOG_R
 			          << std::endl;
 			this->_commandHandler.handleCommand(client, command_line);
+		}
+
+		if (client.isDisconnected()) {
+			break;
 		}
 	}
 }
@@ -415,5 +433,30 @@ void Server::_updatePollEvents() {
 			this->_eventManager.setEvents(fd, POLLIN | POLLOUT);
 		else
 			this->_eventManager.setEvents(fd, POLLIN);
+	}
+}
+
+/**
+ * @brief Checks for client timeouts and sends pings to inactive clients.
+ */
+void Server::_checkTimeouts() {
+	time_t           now = std::time(NULL);
+	std::vector<int> to_remove;
+
+	for (std::map<int, Client *>::iterator it = this->_clients.begin();
+	     it != this->_clients.end(); ++it) {
+		time_t idle_time = now - it->second->getLastActivity();
+		if (idle_time > 180) {
+			to_remove.push_back(it->first);
+			std::string error_msg = "ERROR :Closing Link: Ping timeout\r\n";
+			send(it->first, error_msg.c_str(), error_msg.length(), 0);
+			it->second->setQuitReason("Ping timeout");
+		} else if (idle_time >= 120 && idle_time < 130) {
+			sendToClient(*it->second, "PING :ircserv\r\n");
+		}
+	}
+
+	for (size_t i = 0; i < to_remove.size(); ++i) {
+		_removeClient(to_remove[i]);
 	}
 }
