@@ -3,6 +3,7 @@
 #include "Replies.hpp"
 #include "Server.hpp"
 #include "Utils.hpp"
+#include <cstdlib>
 #include <iostream>
 #include <sstream>
 
