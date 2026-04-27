@@ -55,3 +55,7 @@ ircserv
 
 # Utils
 *.txt
+
+# Testers
+!tests/
+!tests/**

@@ -3,6 +3,7 @@
 #include "Replies.hpp"
 #include "Server.hpp"
 #include "Utils.hpp"
+#include <ctime>
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
@@ -188,6 +189,8 @@ void CommandHandler::_handleNick(Client                         &client,
 	}
 
 	std::string nick = args[0];
+	std::string current = client.getNickname().empty() ? std::string("*")
+	                                                   : client.getNickname();
 
 	// Validate nickname per RFC 2812:
 	// - Must start with a letter or special char ([]\\`_^{|})
@@ -197,9 +200,6 @@ void CommandHandler::_handleNick(Client                         &client,
 	if (nick.empty() || nick.length() > 9 ||
 	    (!std::isalpha(nick[0]) &&
 	     std::string("[]\\`_^{|}").find(nick[0]) == std::string::npos)) {
-		std::string current = client.getNickname().empty()
-		                          ? std::string("*")
-		                          : client.getNickname();
 		_server->sendReply(client, ERR_ERRONEUSNICKNAME(current, nick));
 		return;
 	}
@@ -207,20 +207,19 @@ void CommandHandler::_handleNick(Client                         &client,
 		char c = nick[j];
 		if (!std::isalnum(c) && c != '-' &&
 		    std::string("[]\\`_^{|}").find(c) == std::string::npos) {
-			std::string current = client.getNickname().empty()
-			                          ? std::string("*")
-			                          : client.getNickname();
 			_server->sendReply(client, ERR_ERRONEUSNICKNAME(current, nick));
 			return;
 		}
 	}
 
+	if (_isBotNickname(nick)) {
+		_server->sendReply(client, ERR_NICKNAMEINUSE(current, nick));
+		return;
+	}
+
 	// Check for nickname collisions
 	Client *existing = _server->getClientByNickname(nick);
 	if (existing != NULL && existing != &client) {
-		std::string current = client.getNickname().empty()
-		                          ? std::string("*")
-		                          : client.getNickname();
 		_server->sendReply(client, ERR_NICKNAMEINUSE(current, nick));
 		return;
 	}
@@ -458,6 +457,11 @@ void CommandHandler::_handlePrivmsg(Client                         &client,
 	std::string target = args[0];
 	std::string text = args[1];
 
+	if (_isBotNickname(target)) {
+		_handleBotPrivmsg(client.getNickname(), text);
+		return;
+	}
+
 	// Target is a channel
 	if (target[0] == '#' || target[0] == '&') {
 		Channel *channel = _server->getChannel(target);
@@ -476,6 +480,7 @@ void CommandHandler::_handlePrivmsg(Client                         &client,
 		channel->broadcastMessage(":" + client.getPrefix() + " PRIVMSG " +
 		                              target + " :" + text,
 		                          &client);
+		_handleBotPrivmsg(target, text);
 	}
 	// Target is a user
 	else {
@@ -489,6 +494,69 @@ void CommandHandler::_handlePrivmsg(Client                         &client,
 		std::string msg = ":" + client.getPrefix() + " PRIVMSG " + target +
 		                  " :" + text + "\r\n";
 		_server->sendToClient(*target_client, msg);
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Internal Bot
+// ═══════════════════════════════════════════════════════════════
+
+bool CommandHandler::_isBotNickname(const std::string &nick) const {
+	return toIrcLower(nick) == "bot";
+}
+
+void CommandHandler::_handleBotPrivmsg(const std::string &target,
+                                       const std::string &text) {
+	if (text.empty() || text[0] != '!')
+		return;
+
+	std::string reply = _getBotReply(text);
+	if (reply.empty())
+		return;
+
+	_sendBotNotice(target, reply);
+}
+
+std::string CommandHandler::_getBotReply(const std::string &text) const {
+	if (text == "!help") {
+		return "commands: !help !ping !time";
+	}
+	if (text == "!ping") {
+		return "pong";
+	}
+	if (text == "!time") {
+		return "time " + _getBotTime();
+	}
+	return "unknown command";
+}
+
+std::string CommandHandler::_getBotTime() const {
+	std::time_t now = std::time(NULL);
+	std::tm    *local_time = std::localtime(&now);
+	char        buffer[20];
+
+	if (local_time == NULL ||
+	    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S",
+	                  local_time) == 0) {
+		return "unavailable";
+	}
+	return std::string(buffer);
+}
+
+void CommandHandler::_sendBotNotice(const std::string &target,
+                                    const std::string &text) {
+	std::string msg = ":Bot!bot@ircserv NOTICE " + target + " :" + text;
+
+	if (!target.empty() && (target[0] == '#' || target[0] == '&')) {
+		Channel *channel = _server->getChannel(target);
+		if (channel != NULL) {
+			channel->broadcastMessage(msg, NULL);
+		}
+	} else {
+		Client *target_client = _server->getClientByNickname(target);
+		if (target_client != NULL) {
+			_server->sendToClient(*target_client, msg + "\r\n");
+		}
 	}
 }
 
@@ -552,6 +620,13 @@ void CommandHandler::_handleInvite(Client                         &client,
 		return;
 	}
 
+	if (channel->isMember(target)) {
+		_server->sendReply(
+		    client,
+		    ERR_USERONCHANNEL(client.getNickname(), targetNick, channelName));
+		return;
+	}
+
 	channel->addInvited(targetNick);
 
 	_server->sendReply(
@@ -591,6 +666,12 @@ void CommandHandler::_handleTopic(Client                         &client,
 			_server->sendReply(client,
 			                   RPL_TOPIC(client.getNickname(), channelName,
 			                             channel->getTopic()));
+		return;
+	}
+
+	if (!channel->isMember(&client)) {
+		_server->sendReply(client,
+		                   ERR_NOTONCHANNEL(client.getNickname(), channelName));
 		return;
 	}
 
@@ -675,50 +756,56 @@ void CommandHandler::_applyModes(Client &client, Channel &channel,
 	bool        adding = true;
 	std::string applied_modes;
 	std::string applied_params;
+	bool        pending_sign = false;
+	char        current_sign = '+';
 
 	for (size_t i = 0; i < modes.size(); i++) {
 		char c = modes[i];
 		if (c == '+') {
 			adding = true;
-			applied_modes += '+';
+			current_sign = '+';
+			pending_sign = true;
 			continue;
 		}
 		if (c == '-') {
 			adding = false;
-			applied_modes += '-';
+			current_sign = '-';
+			pending_sign = true;
 			continue;
 		}
 
+		bool mode_applied = false;
+
 		if (c == 'i') {
 			channel.setInviteOnly(adding);
-			applied_modes += 'i';
+			mode_applied = true;
 		} else if (c == 't') {
 			channel.setTopicRestricted(adding);
-			applied_modes += 't';
+			mode_applied = true;
 		} else if (c == 'k') {
 			if (adding && paramIndex < params.size()) {
 				channel.setKey(params[paramIndex]);
-				applied_modes += 'k';
 				applied_params += " " + params[paramIndex++];
+				mode_applied = true;
 			} else if (!adding) {
 				channel.removeKey();
-				applied_modes += 'k';
 				if (paramIndex < params.size()) {
 					applied_params += " " + params[paramIndex++];
 				}
+				mode_applied = true;
 			}
 		} else if (c == 'l') {
 			if (adding && paramIndex < params.size()) {
 				long limit = std::atol(params[paramIndex].c_str());
 				if (limit > 0) {
 					channel.setUserLimit(static_cast<size_t>(limit));
-					applied_modes += 'l';
 					applied_params += " " + params[paramIndex];
+					mode_applied = true;
 				}
 				paramIndex++;
 			} else if (!adding) {
 				channel.removeUserLimit();
-				applied_modes += 'l';
+				mode_applied = true;
 			}
 		} else if (c == 'o') {
 			if (paramIndex < params.size()) {
@@ -729,12 +816,23 @@ void CommandHandler::_applyModes(Client &client, Channel &channel,
 						channel.addOperator(target);
 					else
 						channel.removeOperator(target);
-					applied_modes += 'o';
 					applied_params += " " + params[paramIndex++];
+					mode_applied = true;
 				} else {
 					paramIndex++;
 				}
 			}
+		} else {
+			_server->sendReply(
+			    client, ERR_UNKNOWNMODE(client.getNickname(), std::string(1, c)));
+		}
+
+		if (mode_applied) {
+			if (pending_sign || applied_modes.empty()) {
+				applied_modes += current_sign;
+				pending_sign = false;
+			}
+			applied_modes += c;
 		}
 	}
 
