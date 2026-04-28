@@ -39,6 +39,11 @@ El runner imprime cada caso como `PASS` o `FAIL` y deja logs en:
 - registro basico
 - registro con comandos fragmentados en varios paquetes
 - `JOIN` y `PRIVMSG`
+- bonus Bot: comandos directos `!help`, `!ping`, `!time`
+- bonus Bot: respuesta en canal y ausencia de respuesta a `NOTICE`
+- bonus Bot: nick `Bot` reservado
+- bonus DCC SEND: reenvio intacto usuario a usuario
+- bonus DCC SEND: mensaje fragmentado y nick inexistente
 - control de `TOPIC` desde fuera del canal
 - control de `TOPIC` con `+t` para exigir operador
 - control de `INVITE` sobre usuarios ya presentes

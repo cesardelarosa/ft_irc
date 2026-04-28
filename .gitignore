@@ -59,3 +59,5 @@ ircserv
 # Testers
 !tests/
 !tests/**
+tests/**/__pycache__/
+tests/**/*.pyc
