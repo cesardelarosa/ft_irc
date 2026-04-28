@@ -70,3 +70,6 @@ ircserv
 !tests/**
 tests/**/__pycache__/
 tests/**/*.pyc
+
+# gitignore
+.gitignore
