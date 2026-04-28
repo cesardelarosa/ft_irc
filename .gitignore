@@ -56,6 +56,15 @@ ircserv
 # Utils
 *.txt
 
+# Windows / macOS
+*:Zone.Identifier
+.DS_Store
+
+# IDE
+.vscode
+.codex
+*.swp
+
 # Testers
 !tests/
 !tests/**
