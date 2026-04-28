@@ -9,6 +9,10 @@
 	"001 " + nick + " :Welcome to the Internet Relay Chat Network " + nick + \
 	    "!" + user + "@" + host
 
+// CAPABILITIES
+#define RPL_ISUPPORT(nick, tokens) \
+	"005 " + nick + " " + tokens + " :are supported by this server"
+
 #define RPL_NOTOPIC(nick, channel) \
 	"331 " + nick + " " + channel + " :No topic is set"
 
@@ -29,6 +33,10 @@
 
 #define RPL_ENDOFINVITELIST(nick, channel) \
 	"337 " + nick + " " + channel + " :End of INVITE list"
+
+// CHANNEL CREATION
+#define RPL_CREATIONTIME(nick, channel, creation_time) \
+	"329 " + nick + " " + channel + " " + creation_time
 
 // WHOIS
 #define RPL_WHOISUSER(nick, target, user, host, realname) \
@@ -56,11 +64,8 @@
 
 #define ERR_NOTREGISTERED(nick) "451 " + nick + " :You have not registered"
 
-/*#define ERR_NEEDMOREPARAMS(nick, command) \
-    "461 " + nick + " " + command + " :Not enough parameters"*/
-
-#define ERR_NEEDMOREPARAMS(command) \
-	std::string("461 ") + command + " :Not enough parameters"
+#define ERR_NEEDMOREPARAMS(nick, command) \
+	"461 " + (nick.empty() ? std::string("*") : nick) + " " + command + " :Not enough parameters"
 
 #define ERR_ALREADYREGISTRED(nick) \
 	"462 " + nick + " :Unauthorized command (already registered)"
@@ -111,6 +116,16 @@
 // MODE
 #define ERR_UNKNOWNMODE(nick, mode) \
 	"472 " + nick + " " + mode + " :is unknown mode char to me"
+
+// USER MODES
+#define RPL_UMODEIS(nick, modes) \
+	"221 " + nick + " " + modes
+
+#define ERR_UMODEUNKNOWNFLAG(nick) \
+	"501 " + nick + " :Unknown MODE flag"
+
+#define ERR_USERSDONTMATCH(nick) \
+	"502 " + nick + " :Cannot change mode for other users"
 
 // NICK
 #define ERR_NONICKNAMEGIVEN(nick) "431 " + nick + " :No nickname given"

@@ -9,7 +9,8 @@
  * @param name The name of the channel (e.g., "#general").
  */
 Channel::Channel(std::string const &name)
-    : _name(name), _topic(), _key(), _user_limit(0), _invite_only(false),
+    : _name(name), _topic(), _key(), _user_limit(0),
+      _creation_time(std::time(NULL)), _invite_only(false),
       _topic_restricted(false), _members(), _operators(), _invited() {
 }
 
@@ -35,6 +36,10 @@ const std::string &Channel::getKey() const {
 
 size_t Channel::getUserLimit() const {
 	return this->_user_limit;
+}
+
+time_t Channel::getCreationTime() const {
+	return this->_creation_time;
 }
 
 bool Channel::isInviteOnly() const {

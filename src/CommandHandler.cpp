@@ -145,6 +145,7 @@ void CommandHandler::_tryRegister(Client &client) {
 	_server->sendReply(client,
 	                   RPL_WELCOME(client.getNickname(), client.getUsername(),
 	                               client.getHostname()));
+	_server->sendReply(client, RPL_ISUPPORT(client.getNickname(), "CHANMODES=i,t,k,l,o PREFIX=(o)@ MAXNICKLEN=9"));
 	std::cout << LOG_SERVER << LOG_NICK << client.getNickname() << LOG_R
 	          << " registered " << ANSI_DIM << "(fd " << client.getFd() << ")"
 	          << LOG_R << std::endl;
@@ -161,7 +162,7 @@ void CommandHandler::_handlePass(Client                         &client,
 		return;
 	}
 	if (args.empty()) {
-		_server->sendReply(client, ERR_NEEDMOREPARAMS("PASS"));
+		_server->sendReply(client, ERR_NEEDMOREPARAMS(client.getNickname(), "PASS"));
 		return;
 	}
 	if (args[0] != _server->getPassword()) {
@@ -261,7 +262,7 @@ void CommandHandler::_handleUser(Client                         &client,
 		return;
 	}
 	if (args.size() < 4) {
-		_server->sendReply(client, ERR_NEEDMOREPARAMS("USER"));
+		_server->sendReply(client, ERR_NEEDMOREPARAMS(client.getNickname(), "USER"));
 		return;
 	}
 
@@ -281,7 +282,7 @@ void CommandHandler::_handleUser(Client                         &client,
 void CommandHandler::_handleJoin(Client                         &client,
                                  const std::vector<std::string> &args) {
 	if (args.empty()) {
-		_server->sendReply(client, ERR_NEEDMOREPARAMS("JOIN"));
+		_server->sendReply(client, ERR_NEEDMOREPARAMS(client.getNickname(), "JOIN"));
 		return;
 	}
 
@@ -379,6 +380,11 @@ void CommandHandler::_handleJoin(Client                         &client,
 		}
 
 		// Send NAMES list
+		std::stringstream ss_time;
+		ss_time << channel->getCreationTime();
+		_server->sendReply(client,
+		                   RPL_CREATIONTIME(client.getNickname(), channel_name,
+		                                    ss_time.str()));
 		_server->sendReply(client,
 		                   RPL_NAMREPLY(client.getNickname(), channel_name,
 		                                channel->getMemberListString()));
@@ -394,7 +400,7 @@ void CommandHandler::_handleJoin(Client                         &client,
 void CommandHandler::_handlePart(Client                         &client,
                                  const std::vector<std::string> &args) {
 	if (args.empty()) {
-		_server->sendReply(client, ERR_NEEDMOREPARAMS("PART"));
+		_server->sendReply(client, ERR_NEEDMOREPARAMS(client.getNickname(), "PART"));
 		return;
 	}
 
@@ -527,7 +533,7 @@ void CommandHandler::_handleQuit(Client                         &client,
 void CommandHandler::_handleInvite(Client                         &client,
                                    const std::vector<std::string> &args) {
 	if (args.size() < 2) {
-		_server->sendReply(client, ERR_NEEDMOREPARAMS("INVITE"));
+		_server->sendReply(client, ERR_NEEDMOREPARAMS(client.getNickname(), "INVITE"));
 		return;
 	}
 
@@ -584,7 +590,7 @@ void CommandHandler::_handleInvite(Client                         &client,
 void CommandHandler::_handleTopic(Client                         &client,
                                   const std::vector<std::string> &args) {
 	if (args.empty()) {
-		_server->sendReply(client, ERR_NEEDMOREPARAMS("TOPIC"));
+		_server->sendReply(client, ERR_NEEDMOREPARAMS(client.getNickname(), "TOPIC"));
 		return;
 	}
 
@@ -636,11 +642,28 @@ void CommandHandler::_handleTopic(Client                         &client,
 void CommandHandler::_handleMode(Client                         &client,
                                  const std::vector<std::string> &args) {
 	if (args.empty()) {
-		_server->sendReply(client, ERR_NEEDMOREPARAMS("MODE"));
+		_server->sendReply(client, ERR_NEEDMOREPARAMS(client.getNickname(), "MODE"));
 		return;
 	}
 
-	std::string channelName = args[0];
+	std::string target = args[0];
+
+	// Handle user MODE queries (e.g., "MODE Cesar")
+	if (target[0] != '#' && target[0] != '&') {
+		if (target != client.getNickname()) {
+			_server->sendReply(client, ERR_USERSDONTMATCH(client.getNickname()));
+			return;
+		}
+		if (args.size() == 1) {
+			_server->sendReply(client, RPL_UMODEIS(client.getNickname(), "+"));
+			return;
+		} else {
+			_server->sendReply(client, ERR_UMODEUNKNOWNFLAG(client.getNickname()));
+			return;
+		}
+	}
+
+	std::string channelName = target;
 	Channel    *channel = _server->getChannel(channelName);
 
 	if (!channel) {
@@ -789,7 +812,7 @@ void CommandHandler::_applyModes(Client &client, Channel &channel,
 void CommandHandler::_handleKick(Client                         &client,
                                  const std::vector<std::string> &args) {
 	if (args.size() < 2) {
-		_server->sendReply(client, ERR_NEEDMOREPARAMS("KICK"));
+		_server->sendReply(client, ERR_NEEDMOREPARAMS(client.getNickname(), "KICK"));
 		return;
 	}
 
@@ -858,7 +881,7 @@ void CommandHandler::_handleKick(Client                         &client,
 void CommandHandler::_handlePing(Client                         &client,
                                  const std::vector<std::string> &args) {
 	if (args.empty()) {
-		_server->sendReply(client, ERR_NEEDMOREPARAMS("PING"));
+		_server->sendReply(client, ERR_NEEDMOREPARAMS(client.getNickname(), "PING"));
 		return;
 	}
 	std::string msg =

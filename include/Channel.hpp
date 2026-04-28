@@ -3,6 +3,7 @@
 #ifndef CHANNEL_HPP
 #define CHANNEL_HPP
 
+#include <ctime>
 #include <set>
 #include <string>
 #include <vector>
@@ -19,6 +20,7 @@ class Channel {
 	const std::string &getTopic() const;
 	const std::string &getKey() const;
 	size_t             getUserLimit() const;
+	time_t             getCreationTime() const;
 	bool               isInviteOnly() const;
 	bool               isTopicRestricted() const;
 	bool               hasKey() const;
@@ -62,6 +64,7 @@ class Channel {
 	std::string _topic;
 	std::string _key;
 	size_t      _user_limit;
+	time_t      _creation_time;
 
 	bool _invite_only;
 	bool _topic_restricted;
