@@ -56,13 +56,11 @@ class CommandHandler {
 	void _handleCap(Client &client, const std::vector<std::string> &args);
 
 	// Internal bot
-	bool        _isBotNickname(const std::string &nick) const;
-	void        _handleBotPrivmsg(const std::string &target,
-	                              const std::string &text);
+	bool _isBotNickname(const std::string &nick) const;
+	void _handleBotPrivmsg(const std::string &target, const std::string &text);
 	std::string _getBotReply(const std::string &text) const;
 	std::string _getBotTime() const;
-	void        _sendBotNotice(const std::string &target,
-	                           const std::string &text);
+	void _sendBotNotice(const std::string &target, const std::string &text);
 
 	void _applyModes(Client &client, Channel &channel, const std::string &modes,
 	                 const std::vector<std::string> &params, size_t paramIndex);

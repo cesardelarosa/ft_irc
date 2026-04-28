@@ -3,8 +3,8 @@
 #include "Replies.hpp"
 #include "Server.hpp"
 #include "Utils.hpp"
-#include <ctime>
 #include <cstdlib>
+#include <ctime>
 #include <iostream>
 #include <sstream>
 
@@ -189,8 +189,8 @@ void CommandHandler::_handleNick(Client                         &client,
 	}
 
 	std::string nick = args[0];
-	std::string current = client.getNickname().empty() ? std::string("*")
-	                                                   : client.getNickname();
+	std::string current =
+	    client.getNickname().empty() ? std::string("*") : client.getNickname();
 
 	// Validate nickname per RFC 2812:
 	// - Must start with a letter or special char ([]\\`_^{|})
@@ -621,9 +621,8 @@ void CommandHandler::_handleInvite(Client                         &client,
 	}
 
 	if (channel->isMember(target)) {
-		_server->sendReply(
-		    client,
-		    ERR_USERONCHANNEL(client.getNickname(), targetNick, channelName));
+		_server->sendReply(client, ERR_USERONCHANNEL(client.getNickname(),
+		                                             targetNick, channelName));
 		return;
 	}
 
@@ -823,8 +822,8 @@ void CommandHandler::_applyModes(Client &client, Channel &channel,
 				}
 			}
 		} else {
-			_server->sendReply(
-			    client, ERR_UNKNOWNMODE(client.getNickname(), std::string(1, c)));
+			_server->sendReply(client, ERR_UNKNOWNMODE(client.getNickname(),
+			                                           std::string(1, c)));
 		}
 
 		if (mode_applied) {

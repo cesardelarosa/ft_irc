@@ -33,8 +33,8 @@ class Server {
 	Channel *getChannel(const std::string &name);
 	Channel *createChannel(const std::string &name);
 	void     removeChannel(const std::string &name);
-	void     removeClientFromAllChannels(Client            *client,
-	                                     const std::string &reason = "Client quit");
+	void removeClientFromAllChannels(Client            *client,
+	                                 const std::string &reason = "Client quit");
 
   private:
 	int                              _port;
