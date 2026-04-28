@@ -18,7 +18,8 @@ static void signalHandler(int signum) {
 /**
  * @brief Configures signal handling for the server process.
  * @details Uses sigaction to handle SIGINT/SIGTERM (clean shutdown)
- *          and to ignore SIGPIPE (prevents crash on send to closed socket).
+ *          and to ignore SIGPIPE and SIGQUIT (prevents crash on send to
+ *          closed socket or Ctrl+\ core dump).
  */
 static void setupSignals() {
 	struct sigaction sa;
@@ -28,11 +29,12 @@ static void setupSignals() {
 	sigaction(SIGINT, &sa, NULL);
 	sigaction(SIGTERM, &sa, NULL);
 
-	struct sigaction sa_pipe;
+	struct sigaction sa_ignore;
 
-	std::memset(&sa_pipe, 0, sizeof(sa_pipe));
-	sa_pipe.sa_handler = SIG_IGN;
-	sigaction(SIGPIPE, &sa_pipe, NULL);
+	std::memset(&sa_ignore, 0, sizeof(sa_ignore));
+	sa_ignore.sa_handler = SIG_IGN;
+	sigaction(SIGPIPE, &sa_ignore, NULL);
+	sigaction(SIGQUIT, &sa_ignore, NULL);
 }
 
 /**

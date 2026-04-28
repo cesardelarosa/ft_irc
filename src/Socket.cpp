@@ -1,4 +1,5 @@
 #include "Socket.hpp"
+#include "Constants.hpp"
 #include <arpa/inet.h>
 #include <cstring>
 #include <fcntl.h>
@@ -84,7 +85,7 @@ void Socket::initServer(int port) {
 		throw std::runtime_error("Failed to bind to port.");
 	}
 
-	if (listen(this->_fd, 10) == -1)
+	if (listen(this->_fd, IRC::Limits::LISTEN_BACKLOG) == -1)
 		throw std::runtime_error("Failed to listen on socket.");
 }
 

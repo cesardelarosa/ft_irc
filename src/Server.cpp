@@ -1,4 +1,5 @@
 #include "Server.hpp"
+#include "Constants.hpp"
 #include "Utils.hpp"
 #include <arpa/inet.h>
 #include <cerrno>
@@ -56,7 +57,7 @@ void Server::start() {
  */
 void Server::sendReply(Client &client, const std::string &message) {
 	std::string final_message =
-	    ":" + std::string("ircserv") + " " + message + "\r\n";
+	    ":" + IRC::Identity::SERVER_NAME + " " + message + "\r\n";
 	client.queueMessage(final_message);
 }
 
@@ -216,14 +217,14 @@ void Server::_runEventLoop() {
 	while (!g_shutdown) {
 		_updatePollEvents();
 
-		if (this->_eventManager.waitEvents(5000) == -1) {
+		if (this->_eventManager.waitEvents(IRC::Timing::POLL_TIMEOUT_MS) == -1) {
 			if (errno == EINTR)
 				break;
 			throw std::runtime_error("poll() failed.");
 		}
 
 		time_t now = std::time(NULL);
-		if (now - last_timeout_check >= 10) {
+		if (now - last_timeout_check >= IRC::Timing::TIMEOUT_CHECK_INTERVAL) {
 			_checkTimeouts();
 			last_timeout_check = now;
 		}
@@ -336,7 +337,7 @@ bool Server::_handleClientData(int client_fd) {
 		it->second->updateActivity();
 		it->second->addToBuffer(buffer, nbytes);
 
-		if (it->second->getBuffer().size() > 4096) {
+		if (it->second->getBuffer().size() > IRC::Limits::RECV_BUFFER_MAX) {
 			std::cerr << LOG_WARN << "Buffer overflow from fd " << LOG_FD
 			          << client_fd << LOG_R << ANSI_YELLOW << " — disconnecting"
 			          << LOG_R << std::endl;
@@ -370,8 +371,8 @@ void Server::_processClientCommands(Client &client) {
 		std::string command_line = buffer.substr(0, pos);
 		buffer.erase(0, pos + 2);
 
-		if (command_line.length() > 510) {
-			command_line = command_line.substr(0, 510);
+		if (command_line.length() > IRC::Limits::MAX_IRC_LINE) {
+			command_line = command_line.substr(0, IRC::Limits::MAX_IRC_LINE);
 		}
 
 		if (!command_line.empty()) {
@@ -459,13 +460,13 @@ void Server::_checkTimeouts() {
 	for (std::map<int, Client *>::iterator it = this->_clients.begin();
 	     it != this->_clients.end(); ++it) {
 		time_t idle_time = now - it->second->getLastActivity();
-		if (idle_time > 180) {
+		if (idle_time > IRC::Timing::TIMEOUT_DISCONNECT) {
 			to_remove.push_back(it->first);
 			std::string error_msg = "ERROR :Closing Link: Ping timeout\r\n";
 			send(it->first, error_msg.c_str(), error_msg.length(), 0);
 			it->second->setQuitReason("Ping timeout");
-		} else if (idle_time >= 120 && idle_time < 130) {
-			sendToClient(*it->second, "PING :ircserv\r\n");
+		} else if (idle_time >= IRC::Timing::PING_IDLE_START && idle_time < IRC::Timing::PING_IDLE_END) {
+			sendToClient(*it->second, "PING :" + IRC::Identity::SERVER_NAME + "\r\n");
 		}
 	}
 

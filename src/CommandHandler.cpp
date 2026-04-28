@@ -1,4 +1,5 @@
 #include "CommandHandler.hpp"
+#include "Constants.hpp"
 #include "Channel.hpp"
 #include "Replies.hpp"
 #include "Server.hpp"
@@ -12,7 +13,7 @@
  * @brief Constructs a new CommandHandler and registers all available commands.
  * @param server Pointer to the main Server object.
  */
-CommandHandler::CommandHandler(Server *server) : _server(server), _commands() {
+CommandHandler::CommandHandler(Server *server) : _server(server), _bot(server), _commands() {
 	this->_commands["PASS"] = &CommandHandler::_handlePass;
 	this->_commands["NICK"] = &CommandHandler::_handleNick;
 	this->_commands["USER"] = &CommandHandler::_handleUser;
@@ -197,7 +198,7 @@ void CommandHandler::_handleNick(Client                         &client,
 	// - Subsequent chars: letters, digits, special, or hyphen
 	// - Max 9 characters
 	// - Cannot contain @, !, *, #, &, space, :, or comma
-	if (nick.empty() || nick.length() > 9 ||
+	if (nick.empty() || nick.length() > IRC::Limits::MAX_NICK_LENGTH ||
 	    (!std::isalpha(nick[0]) &&
 	     std::string("[]\\`_^{|}").find(nick[0]) == std::string::npos)) {
 		_server->sendReply(client, ERR_ERRONEUSNICKNAME(current, nick));
@@ -212,7 +213,7 @@ void CommandHandler::_handleNick(Client                         &client,
 		}
 	}
 
-	if (_isBotNickname(nick)) {
+	if (_bot.isNickname(nick)) {
 		_server->sendReply(client, ERR_NICKNAMEINUSE(current, nick));
 		return;
 	}
@@ -457,8 +458,8 @@ void CommandHandler::_handlePrivmsg(Client                         &client,
 	std::string target = args[0];
 	std::string text = args[1];
 
-	if (_isBotNickname(target)) {
-		_handleBotPrivmsg(client.getNickname(), text);
+	if (_bot.isNickname(target)) {
+		_bot.handlePrivmsg(client.getNickname(), text);
 		return;
 	}
 
@@ -480,7 +481,7 @@ void CommandHandler::_handlePrivmsg(Client                         &client,
 		channel->broadcastMessage(":" + client.getPrefix() + " PRIVMSG " +
 		                              target + " :" + text,
 		                          &client);
-		_handleBotPrivmsg(target, text);
+		_bot.handlePrivmsg(target, text);
 	}
 	// Target is a user
 	else {
@@ -497,68 +498,7 @@ void CommandHandler::_handlePrivmsg(Client                         &client,
 	}
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  Internal Bot
-// ═══════════════════════════════════════════════════════════════
 
-bool CommandHandler::_isBotNickname(const std::string &nick) const {
-	return toIrcLower(nick) == "bot";
-}
-
-void CommandHandler::_handleBotPrivmsg(const std::string &target,
-                                       const std::string &text) {
-	if (text.empty() || text[0] != '!')
-		return;
-
-	std::string reply = _getBotReply(text);
-	if (reply.empty())
-		return;
-
-	_sendBotNotice(target, reply);
-}
-
-std::string CommandHandler::_getBotReply(const std::string &text) const {
-	if (text == "!help") {
-		return "commands: !help !ping !time";
-	}
-	if (text == "!ping") {
-		return "pong";
-	}
-	if (text == "!time") {
-		return "time " + _getBotTime();
-	}
-	return "unknown command";
-}
-
-std::string CommandHandler::_getBotTime() const {
-	std::time_t now = std::time(NULL);
-	std::tm    *local_time = std::localtime(&now);
-	char        buffer[20];
-
-	if (local_time == NULL ||
-	    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S",
-	                  local_time) == 0) {
-		return "unavailable";
-	}
-	return std::string(buffer);
-}
-
-void CommandHandler::_sendBotNotice(const std::string &target,
-                                    const std::string &text) {
-	std::string msg = ":Bot!bot@ircserv NOTICE " + target + " :" + text;
-
-	if (!target.empty() && (target[0] == '#' || target[0] == '&')) {
-		Channel *channel = _server->getChannel(target);
-		if (channel != NULL) {
-			channel->broadcastMessage(msg, NULL);
-		}
-	} else {
-		Client *target_client = _server->getClientByNickname(target);
-		if (target_client != NULL) {
-			_server->sendToClient(*target_client, msg + "\r\n");
-		}
-	}
-}
 
 // ═══════════════════════════════════════════════════════════════
 //  QUIT
@@ -922,7 +862,7 @@ void CommandHandler::_handlePing(Client                         &client,
 		return;
 	}
 	std::string msg =
-	    ":" + std::string("ircserv") + " PONG ircserv :" + args[0] + "\r\n";
+	    ":" + IRC::Identity::SERVER_NAME + " PONG " + IRC::Identity::SERVER_NAME + " :" + args[0] + "\r\n";
 	_server->sendToClient(client, msg);
 }
 
@@ -972,7 +912,7 @@ void CommandHandler::_handleNotice(Client                         &client,
 void CommandHandler::_handleCap(Client                         &client,
                                 const std::vector<std::string> &args) {
 	if (!args.empty() && args[0] == "LS") {
-		std::string msg = ":" + std::string("ircserv") + " CAP * LS :\r\n";
+		std::string msg = ":" + IRC::Identity::SERVER_NAME + " CAP * LS :\r\n";
 		_server->sendToClient(client, msg);
 	}
 }
@@ -1001,8 +941,8 @@ void CommandHandler::_handleWhois(Client                         &client,
 	                                         target->getHostname(),
 	                                         target->getRealname()));
 	_server->sendReply(client, RPL_WHOISSERVER(client.getNickname(), targetNick,
-	                                           std::string("ircserv"),
-	                                           std::string("ft_irc server")));
+	                                           IRC::Identity::SERVER_NAME,
+	                                           IRC::Identity::SERVER_INFO));
 	_server->sendReply(client,
 	                   RPL_ENDOFWHOIS(client.getNickname(), targetNick));
 }

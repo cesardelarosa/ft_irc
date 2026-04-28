@@ -1,4 +1,5 @@
 #include "Client.hpp"
+#include "Constants.hpp"
 
 /**
  * @brief Constructs a new Client object.
@@ -117,7 +118,7 @@ void Client::updateActivity() {
 // ──────────────────────────── Write buffer ───────────────────────
 
 void Client::queueMessage(const std::string &msg) {
-	if (this->_send_buffer.size() + msg.size() > 65536) {
+	if (this->_send_buffer.size() + msg.size() > IRC::Limits::SEND_BUFFER_MAX) {
 		this->_disconnected = true;
 		this->_quit_reason = "SendQ Exceeded";
 		return;

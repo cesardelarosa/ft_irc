@@ -3,6 +3,7 @@
 #ifndef COMMANDHANDLER_HPP
 #define COMMANDHANDLER_HPP
 
+#include "Bot.hpp"
 #include "Client.hpp"
 #include <map>
 #include <string>
@@ -21,6 +22,7 @@ class CommandHandler {
 
   private:
 	Server *_server;
+	Bot     _bot;
 
 	typedef void (CommandHandler::*CommandFunction)(
 	    Client &client, const std::vector<std::string> &args);
@@ -55,12 +57,7 @@ class CommandHandler {
 	void _handlePong(Client &client, const std::vector<std::string> &args);
 	void _handleCap(Client &client, const std::vector<std::string> &args);
 
-	// Internal bot
-	bool _isBotNickname(const std::string &nick) const;
-	void _handleBotPrivmsg(const std::string &target, const std::string &text);
-	std::string _getBotReply(const std::string &text) const;
-	std::string _getBotTime() const;
-	void _sendBotNotice(const std::string &target, const std::string &text);
+
 
 	void _applyModes(Client &client, Channel &channel, const std::string &modes,
 	                 const std::vector<std::string> &params, size_t paramIndex);
