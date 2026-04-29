@@ -19,6 +19,8 @@ static void setupSignals() {
   sigaction(SIGINT, &sa, NULL);
   sigaction(SIGTERM, &sa, NULL);
 
+  // Ignore SIGPIPE to prevent crashing when writing to a closed socket
+  // Ignore SIGQUIT so Ctrl+\ doesn't kill the server
   struct sigaction sa_ignore;
 
   std::memset(&sa_ignore, 0, sizeof(sa_ignore));

@@ -5,7 +5,7 @@
 
 #include <string>
 
-// ──────────────────────── IRC Case Conversion (RFC 2812) ────────────────────
+// ──────────────────────── IRC Case Conversion (RFC 2812) ───────────────────
 std::string toIrcLower(const std::string &str);
 std::string toUpper(const std::string &str);
 

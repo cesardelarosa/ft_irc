@@ -6,21 +6,21 @@
 #include <string>
 
 class Socket {
-  public:
-	Socket();
-	Socket(int fd);
-	~Socket();
+public:
+  Socket();
+  Socket(int fd);
+  ~Socket();
 
-	void initServer(int port);
-	void setNonBlocking();
-	int  acceptClient(std::string &ip_str);
-	int  get() const;
+  void initServer(int port);
+  void setNonBlocking();
+  int acceptClient(std::string &ip_str);
+  int get() const;
 
-  private:
-	int _fd;
+private:
+  int _fd;
 
-	Socket(const Socket &src);
-	Socket &operator=(const Socket &rhs);
+  Socket(const Socket &src);
+  Socket &operator=(const Socket &rhs);
 };
 
 #endif

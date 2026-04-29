@@ -14,6 +14,7 @@ bool Bot::isNickname(const std::string &nick) const {
 }
 
 void Bot::handlePrivmsg(const std::string &target, const std::string &text) {
+  // Only react to messages starting with '!' (bot command prefix)
   if (text.empty() || text[0] != '!')
     return;
 
@@ -42,6 +43,7 @@ std::string Bot::_getTime() const {
   std::tm *local_time = std::localtime(&now);
   char buffer[20];
 
+  // localtime or strftime can fail: return a fallback string
   if (local_time == NULL ||
       std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", local_time) ==
           0) {
@@ -54,11 +56,13 @@ void Bot::_sendNotice(const std::string &target, const std::string &text) {
   std::string msg =
       ":" + IRC::Identity::BOT_PREFIX + " NOTICE " + target + " :" + text;
 
+  // Channel target: broadcast the reply to all members
   if (!target.empty() && (target[0] == '#' || target[0] == '&')) {
     Channel *channel = _server->getChannel(target);
     if (channel != NULL) {
       channel->broadcastMessage(msg, NULL);
     }
+    // User target: send directly to the client
   } else {
     Client *target_client = _server->getClientByNickname(target);
     if (target_client != NULL) {

@@ -146,45 +146,55 @@ void Server::_runEventLoop() {
   time_t last_timeout_check = std::time(NULL);
 
   while (!g_shutdown) {
+    // 1. Update POLLOUT flags for clients that have pending outbound data
     _updatePollEvents();
 
+    // 2. Block until an event fires or the poll timeout expires
     if (this->_eventManager.waitEvents(IRC::Timing::POLL_TIMEOUT_MS) == -1) {
+      // EINTR: interrupted by a signal (e.g. SIGINT), exit gracefully
       if (errno == EINTR)
         break;
       throw std::runtime_error("poll() failed.");
     }
 
+    // 3. Periodically check for idle clients (ping or disconnect)
     time_t now = std::time(NULL);
     if (now - last_timeout_check >= IRC::Timing::TIMEOUT_CHECK_INTERVAL) {
       _checkTimeouts();
       last_timeout_check = now;
     }
 
+    // 4. Index 0 is the server socket: accept new connections
     if (this->_eventManager.getRevents(0) & POLLIN)
       _handleNewConnection();
 
+    // 5. Walk client sockets: handle errors, incoming data, and outgoing data
     for (size_t i = 1; i < this->_eventManager.getSocketCount();) {
       int fd = this->_eventManager.getFd(i);
       short revents = this->_eventManager.getRevents(i);
       bool removed = false;
 
+      // Socket error or peer hangup: remove client immediately
       if (revents & (POLLERR | POLLHUP | POLLNVAL)) {
         std::cerr << LOG_ERROR << "Socket error on fd " << LOG_FD << fd << LOG_R
                   << std::endl;
         _removeClient(fd);
         removed = true;
       } else if (revents & POLLIN) {
+        // Incoming data: read, parse commands, possibly disconnect
         if (_handleClientData(fd)) {
           removed = true;
         }
       }
 
+      // Writable and still connected: flush outbound buffer
       if (!removed && (revents & POLLOUT)) {
         if (_handleClientWrite(fd)) {
           removed = true;
         }
       }
 
+      // Only advance index if the fd was not removed (swap-and-pop in remove)
       if (!removed) {
         ++i;
       }
@@ -200,6 +210,7 @@ void Server::_handleNewConnection() {
   std::string ip_str;
   int client_fd = this->_serverSocket.acceptClient(ip_str);
 
+  // -2 means the connection came from a non-IPv4 address (unsupported)
   if (client_fd == -2) {
     std::cerr << LOG_WARN << "Connection rejected: Only IPv4 is supported."
               << std::endl;
@@ -211,6 +222,7 @@ void Server::_handleNewConnection() {
     return;
   }
 
+  // Allocate and register the new client in the event manager
   Client *new_client = NULL;
   try {
     new_client = new Client(client_fd);
@@ -219,8 +231,10 @@ void Server::_handleNewConnection() {
     this->_clients.insert(std::make_pair(client_fd, new_client));
   } catch (const std::exception &) {
     std::cerr << LOG_ERROR << "Out of memory for new client" << std::endl;
+    // new succeeded but insert/addSocket failed: clean up the object
     if (new_client)
       delete new_client;
+    // new itself failed: close the raw fd since no Client owns it
     else
       close(client_fd);
     return;
@@ -235,7 +249,9 @@ bool Server::_handleClientData(int client_fd) {
   char buffer[512];
   ssize_t nbytes = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
 
+  // 1. Handle recv errors
   if (nbytes < 0) {
+    // EAGAIN is normal for non-blocking sockets: no data available yet
     if (errno == EAGAIN)
       return false;
     std::cerr << LOG_ERROR << "recv() failed for fd " << LOG_FD << client_fd
@@ -244,6 +260,7 @@ bool Server::_handleClientData(int client_fd) {
     return true;
   }
 
+  // 2. Zero bytes means the remote end closed the connection
   if (nbytes == 0) {
     std::cout << LOG_DISCONNECT << ANSI_RED << "Client disconnected" << LOG_R
               << LOG_FD << " (fd " << client_fd << ")" << LOG_R << std::endl;
@@ -251,12 +268,14 @@ bool Server::_handleClientData(int client_fd) {
     return true;
   }
 
+  // 3. Append received data to the client's buffer and process commands
   buffer[nbytes] = '\0';
   std::map<int, Client *>::iterator it = this->_clients.find(client_fd);
   if (it != this->_clients.end()) {
     it->second->updateActivity();
     it->second->addToBuffer(buffer, nbytes);
 
+    // Guard against buffer flooding: disconnect if the buffer grows too large
     if (it->second->getBuffer().size() > IRC::Limits::RECV_BUFFER_MAX) {
       std::cerr << LOG_WARN << "Buffer overflow from fd " << LOG_FD << client_fd
                 << LOG_R << ANSI_YELLOW << " — disconnecting" << LOG_R
@@ -266,6 +285,8 @@ bool Server::_handleClientData(int client_fd) {
     }
     _processClientCommands(*it->second);
 
+    // 4. If the command processing triggered a QUIT, flush remaining
+    //    outbound data and remove the client
     if (it->second->isDisconnected()) {
       if (it->second->hasPendingData()) {
         const std::string &buf = it->second->getSendBuffer();
@@ -286,6 +307,7 @@ void Server::_processClientCommands(Client &client) {
     std::string command_line = buffer.substr(0, pos);
     buffer.erase(0, pos + 2);
 
+    // Truncate oversized lines to prevent abuse
     if (command_line.length() > IRC::Limits::MAX_IRC_LINE) {
       command_line = command_line.substr(0, IRC::Limits::MAX_IRC_LINE);
     }
@@ -296,6 +318,7 @@ void Server::_processClientCommands(Client &client) {
       this->_commandHandler.handleCommand(client, command_line);
     }
 
+    // Stop processing if the client disconnected mid-batch (e.g. QUIT)
     if (client.isDisconnected()) {
       break;
     }
@@ -325,6 +348,7 @@ bool Server::_handleClientWrite(int client_fd) {
   ssize_t sent = send(client_fd, buf.c_str(), buf.length(), 0);
 
   if (sent < 0) {
+    // EAGAIN: socket buffer full, retry on next poll cycle
     if (errno == EAGAIN)
       return false;
     std::cerr << LOG_ERROR << "send() failed for fd " << LOG_FD << client_fd
@@ -355,11 +379,15 @@ void Server::_checkTimeouts() {
   for (std::map<int, Client *>::iterator it = this->_clients.begin();
        it != this->_clients.end(); ++it) {
     time_t idle_time = now - it->second->getLastActivity();
+
+    // Fully timed out: send ERROR and schedule for removal
     if (idle_time > IRC::Timing::TIMEOUT_DISCONNECT) {
       to_remove.push_back(it->first);
       std::string error_msg = "ERROR :Closing Link: Ping timeout\r\n";
       send(it->first, error_msg.c_str(), error_msg.length(), 0);
       it->second->setQuitReason("Ping timeout");
+
+      // Idle but not yet timed out: send a PING to probe liveness
     } else if (idle_time >= IRC::Timing::PING_IDLE_START &&
                idle_time < IRC::Timing::PING_IDLE_END) {
       sendToClient(*it->second, "PING :" + IRC::Identity::SERVER_NAME + "\r\n");

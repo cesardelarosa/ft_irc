@@ -4,6 +4,8 @@
 #include "Replies.hpp"
 #include "Server.hpp"
 #include "Utils.hpp"
+#include <cerrno>
+#include <climits>
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
@@ -42,6 +44,7 @@ void CommandHandler::_parseAndExecute(Client &client,
   std::string trailing;
   bool has_trailing = false;
 
+  // Strip optional IRC source prefix (starts with ':')
   if (!line.empty() && line[0] == ':') {
     size_t prefix_end = line.find(' ');
     if (prefix_end != std::string::npos) {
@@ -175,13 +178,14 @@ void CommandHandler::_handleNick(Client &client,
   std::string current =
       client.getNickname().empty() ? std::string("*") : client.getNickname();
 
-  // Validate nickname per RFC 2812:
+  // 1. Validate first character per RFC 2812: must be a letter or special char
   if (nick.empty() || nick.length() > IRC::Limits::MAX_NICK_LENGTH ||
       (!std::isalpha(nick[0]) &&
        std::string("[]\\`_^{|}").find(nick[0]) == std::string::npos)) {
     _server->sendReply(client, ERR_ERRONEUSNICKNAME(current, nick));
     return;
   }
+  // 2. Validate remaining characters: alphanumeric, hyphen, or special chars
   for (size_t j = 1; j < nick.size(); ++j) {
     char c = nick[j];
     if (!std::isalnum(c) && c != '-' &&
@@ -191,27 +195,27 @@ void CommandHandler::_handleNick(Client &client,
     }
   }
 
+  // 3. Reject if the nickname clashes with the bot's reserved name
   if (_bot.isNickname(nick)) {
     _server->sendReply(client, ERR_NICKNAMEINUSE(current, nick));
     return;
   }
 
-  // Check for nickname collisions
+  // 4. Reject if another client already owns this nickname
   Client *existing = _server->getClientByNickname(nick);
   if (existing != NULL && existing != &client) {
     _server->sendReply(client, ERR_NICKNAMEINUSE(current, nick));
     return;
   }
 
-  // If already registered, broadcast the nick change
+  // 5. Apply the nick change and notify accordingly
   if (client.isRegistered()) {
+    // Already registered: broadcast the change to the client and its channels
     std::string old_prefix = client.getPrefix();
     client.setNickname(nick);
-    // Notify the client itself
     std::string msg = ":" + old_prefix + " NICK " + nick;
     _server->sendToClient(client, msg + "\r\n");
 
-    // Notify all common channels
     std::map<std::string, Channel *> &channels = _server->getChannels();
     for (std::map<std::string, Channel *>::iterator it = channels.begin();
          it != channels.end(); ++it) {
@@ -220,6 +224,7 @@ void CommandHandler::_handleNick(Client &client,
       }
     }
   } else {
+    // Not yet registered: just store it and attempt registration
     client.setNickname(nick);
     _tryRegister(client);
   }
@@ -264,7 +269,7 @@ void CommandHandler::_handleJoin(Client &client,
     return;
   }
 
-  // Support joining multiple channels separated by commas
+  // 1. Parse comma-separated channel names and their matching keys
   std::stringstream ss(args[0]);
   std::string channel_name;
 
@@ -277,15 +282,18 @@ void CommandHandler::_handleJoin(Client &client,
     }
   }
 
+  // 2. Process each channel independently
   size_t idx = 0;
   while (std::getline(ss, channel_name, ',')) {
     if (channel_name.empty())
       continue;
 
+    // Pair each channel with its positional key (empty if none provided)
     std::string key = (idx < keys.size()) ? keys[idx] : "";
     idx++;
 
-    // Channel names must start with '#' or '&' and follow basic RFC rules
+    // 3. Validate channel name format (must start with # or &, no forbidden
+    // chars)
     if (channel_name.length() < 2 || channel_name.length() > 50 ||
         (channel_name[0] != '#' && channel_name[0] != '&') ||
         channel_name.find_first_of(" ,\x07\r\n") != std::string::npos) {
@@ -298,6 +306,7 @@ void CommandHandler::_handleJoin(Client &client,
     bool is_new = (channel == NULL);
 
     if (is_new) {
+      // 4a. Channel does not exist: create it
       channel = _server->createChannel(channel_name);
       if (channel == NULL) {
         _server->sendReply(
@@ -305,11 +314,11 @@ void CommandHandler::_handleJoin(Client &client,
         continue;
       }
     } else {
-      // Already a member? Skip silently
+      // 4b. Channel exists: enforce join restrictions in order
       if (channel->isMember(&client))
         continue;
 
-      // Check invite-only
+      // Invite-only: reject unless the client was explicitly invited
       if (channel->isInviteOnly() &&
           !channel->isInvited(client.getNickname())) {
         _server->sendReply(
@@ -317,14 +326,14 @@ void CommandHandler::_handleJoin(Client &client,
         continue;
       }
 
-      // Check channel key
+      // Key-protected: reject if the provided key does not match
       if (channel->hasKey() && key != channel->getKey()) {
         _server->sendReply(
             client, ERR_BADCHANNELKEY(client.getNickname(), channel_name));
         continue;
       }
 
-      // Check user limit
+      // User limit: reject if the channel is already full
       if (channel->hasUserLimit() &&
           channel->getMemberCount() >= channel->getUserLimit()) {
         _server->sendReply(
@@ -333,26 +342,24 @@ void CommandHandler::_handleJoin(Client &client,
       }
     }
 
-    // Add the client to the channel
+    // 5. Add client to the channel; first joiner becomes operator
     channel->addMember(&client);
     if (is_new) {
       channel->addOperator(&client);
     }
 
-    // Remove from invite list if they were invited
+    // Consume any pending invitation now that the client has joined
     channel->removeInvited(client.getNickname());
 
-    // Broadcast JOIN to all channel members (including the joining client)
+    // 6. Broadcast JOIN and send channel state to the new member
     channel->broadcastMessage(
         ":" + client.getPrefix() + " JOIN " + channel_name, NULL);
 
-    // Send topic
     if (!channel->getTopic().empty()) {
       _server->sendReply(client, RPL_TOPIC(client.getNickname(), channel_name,
                                            channel->getTopic()));
     }
 
-    // Send NAMES list
     std::stringstream ss_time;
     ss_time << channel->getCreationTime();
     _server->sendReply(client, RPL_CREATIONTIME(client.getNickname(),
@@ -435,12 +442,13 @@ void CommandHandler::_handlePrivmsg(Client &client,
   std::string target = args[0];
   std::string text = args[1];
 
+  // Route to the bot if the target matches the bot's reserved nickname
   if (_bot.isNickname(target)) {
     _bot.handlePrivmsg(client.getNickname(), text);
     return;
   }
 
-  // Target is a channel
+  // Target is a channel: sender must be a member to write
   if (target[0] == '#' || target[0] == '&') {
     Channel *channel = _server->getChannel(target);
     if (channel == NULL) {
@@ -454,12 +462,13 @@ void CommandHandler::_handlePrivmsg(Client &client,
       return;
     }
 
-    // Broadcast to all channel members except sender
+    // Broadcast to all channel members except the sender
     channel->broadcastMessage(
         ":" + client.getPrefix() + " PRIVMSG " + target + " :" + text, &client);
+    // Also forward to the bot so it can react to channel commands
     _bot.handlePrivmsg(target, text);
   }
-  // Target is a user
+  // Target is a user: deliver directly
   else {
     Client *target_client = _server->getClientByNickname(target);
     if (target_client == NULL) {
@@ -508,6 +517,7 @@ void CommandHandler::_handleInvite(Client &client,
   std::string targetNick = args[0];
   std::string channelName = args[1];
 
+  // 1. Validate the channel exists
   Channel *channel = _server->getChannel(channelName);
   if (!channel) {
     _server->sendReply(client,
@@ -515,18 +525,21 @@ void CommandHandler::_handleInvite(Client &client,
     return;
   }
 
+  // 2. Invoker must be on the channel
   if (!channel->isMember(&client)) {
     _server->sendReply(client,
                        ERR_NOTONCHANNEL(client.getNickname(), channelName));
     return;
   }
 
+  // 3. Invite-only channels require operator privileges to invite
   if (channel->isInviteOnly() && !channel->isOperator(&client)) {
     _server->sendReply(client,
                        ERR_CHANOPRIVSNEEDED(client.getNickname(), channelName));
     return;
   }
 
+  // 4. Target user must exist on the server
   Client *target = _server->getClientByNickname(targetNick);
   if (!target) {
     _server->sendReply(client,
@@ -534,12 +547,14 @@ void CommandHandler::_handleInvite(Client &client,
     return;
   }
 
+  // 5. Target must not already be a member of the channel
   if (channel->isMember(target)) {
     _server->sendReply(client, ERR_USERONCHANNEL(client.getNickname(),
                                                  targetNick, channelName));
     return;
   }
 
+  // 6. All checks passed: register the invite and notify both parties
   channel->addInvited(targetNick);
 
   _server->sendReply(
@@ -572,6 +587,7 @@ void CommandHandler::_handleTopic(Client &client,
     return;
   }
 
+  // Query mode: no second argument means the client is asking for the topic
   if (args.size() == 1) {
     if (channel->getTopic().empty())
       _server->sendReply(client,
@@ -582,12 +598,14 @@ void CommandHandler::_handleTopic(Client &client,
     return;
   }
 
+  // Set mode: client wants to change the topic — must be a member
   if (!channel->isMember(&client)) {
     _server->sendReply(client,
                        ERR_NOTONCHANNEL(client.getNickname(), channelName));
     return;
   }
 
+  // If +t is set, only operators can change the topic
   if (channel->isTopicRestricted() && !channel->isOperator(&client)) {
     _server->sendReply(client,
                        ERR_CHANOPRIVSNEEDED(client.getNickname(), channelName));
@@ -617,8 +635,9 @@ void CommandHandler::_handleMode(Client &client,
 
   std::string target = args[0];
 
-  // Handle user MODE queries
+  // 1. User MODE: target is not a channel (no # or & prefix)
   if (target[0] != '#' && target[0] != '&') {
+    // Users can only query/change their own modes
     if (target != client.getNickname()) {
       _server->sendReply(client, ERR_USERSDONTMATCH(client.getNickname()));
       return;
@@ -627,11 +646,13 @@ void CommandHandler::_handleMode(Client &client,
       _server->sendReply(client, RPL_UMODEIS(client.getNickname(), "+"));
       return;
     } else {
+      // We don't support user mode changes, only queries
       _server->sendReply(client, ERR_UMODEUNKNOWNFLAG(client.getNickname()));
       return;
     }
   }
 
+  // 2. Channel MODE: validate the channel exists
   std::string channelName = target;
   Channel *channel = _server->getChannel(channelName);
 
@@ -641,6 +662,7 @@ void CommandHandler::_handleMode(Client &client,
     return;
   }
 
+  // 3. Query mode (no mode string): build and return the active mode flags
   if (args.size() == 1) {
     std::string modes = "+";
     std::string modes_params = "";
@@ -650,7 +672,11 @@ void CommandHandler::_handleMode(Client &client,
       modes += "t";
     if (channel->hasKey()) {
       modes += "k";
-      modes_params += " " + channel->getKey();
+      // Only reveal the actual key to channel members; outsiders see '*'
+      if (channel->isMember(&client))
+        modes_params += " " + channel->getKey();
+      else
+        modes_params += " *";
     }
     if (channel->hasUserLimit()) {
       modes += "l";
@@ -659,11 +685,13 @@ void CommandHandler::_handleMode(Client &client,
       modes_params += " " + ss.str();
     }
 
-    _server->sendReply(client, "324 " + client.getNickname() + " " +
-                                   channelName + " " + modes + modes_params);
+    _server->sendReply(client,
+                       RPL_CHANNELMODEIS(client.getNickname(), channelName,
+                                         modes + modes_params));
     return;
   }
 
+  // 4. Change mode: requires operator privileges
   if (!channel->isOperator(&client)) {
     _server->sendReply(client,
                        ERR_CHANOPRIVSNEEDED(client.getNickname(), channelName));
@@ -676,6 +704,7 @@ void CommandHandler::_handleMode(Client &client,
   if (args.size() > 2)
     params.insert(params.begin(), args.begin() + 2, args.end());
 
+  // 5. Delegate to the mode application engine
   _applyModes(client, *channel, modes, params, 0);
 }
 
@@ -688,9 +717,13 @@ void CommandHandler::_applyModes(Client &client, Channel &channel,
   std::string applied_params;
   bool pending_sign = false;
   char current_sign = '+';
+  std::string nick = client.getNickname();
 
+  // Iterate over each character in the mode string (e.g. "+itk-o")
   for (size_t i = 0; i < modes.size(); i++) {
     char c = modes[i];
+
+    // Track +/- direction
     if (c == '+') {
       adding = true;
       current_sign = '+';
@@ -704,58 +737,115 @@ void CommandHandler::_applyModes(Client &client, Channel &channel,
       continue;
     }
 
+    // Skip redundant changes (mode already in desired state)
     bool mode_applied = false;
 
-    if (c == 'i') {
-      channel.setInviteOnly(adding);
-      mode_applied = true;
-    } else if (c == 't') {
-      channel.setTopicRestricted(adding);
-      mode_applied = true;
-    } else if (c == 'k') {
-      if (adding && paramIndex < params.size()) {
-        channel.setKey(params[paramIndex]);
-        applied_params += " " + params[paramIndex++];
-        mode_applied = true;
-      } else if (!adding) {
-        channel.removeKey();
-        if (paramIndex < params.size()) {
-          applied_params += " " + params[paramIndex++];
-        }
+    switch (c) {
+
+    // +i / -i : toggle invite-only
+    case 'i':
+      if (channel.isInviteOnly() != adding) {
+        channel.setInviteOnly(adding);
         mode_applied = true;
       }
-    } else if (c == 'l') {
-      if (adding && paramIndex < params.size()) {
-        long limit = std::atol(params[paramIndex].c_str());
-        if (limit > 0) {
-          channel.setUserLimit(static_cast<size_t>(limit));
-          applied_params += " " + params[paramIndex];
-          mode_applied = true;
-        }
-        paramIndex++;
-      } else if (!adding) {
-        channel.removeUserLimit();
+      break;
+
+    // +t / -t : toggle topic restriction (only ops can change topic)
+    case 't':
+      if (channel.isTopicRestricted() != adding) {
+        channel.setTopicRestricted(adding);
         mode_applied = true;
       }
-    } else if (c == 'o') {
-      if (paramIndex < params.size()) {
-        Client *target = _server->getClientByNickname(params[paramIndex]);
-        if (target && channel.isMember(target)) {
-          if (adding)
-            channel.addOperator(target);
-          else
-            channel.removeOperator(target);
-          applied_params += " " + params[paramIndex++];
-          mode_applied = true;
-        } else {
+      break;
+
+    // +k <key> / -k [*] : set or remove channel key
+    case 'k':
+      if (adding) {
+        if (paramIndex >= params.size())
+          break;
+        std::string key = params[paramIndex++];
+        // Cannot overwrite an existing key — must -k first (ERR_KEYSET)
+        if (channel.hasKey()) {
+          _server->sendReply(client, ERR_KEYSET(nick, channel.getName()));
+          break;
+        }
+        // Reject keys containing spaces to prevent message injection
+        if (key.find(' ') != std::string::npos)
+          break;
+        channel.setKey(key);
+        applied_params += " " + key;
+        mode_applied = true;
+      } else {
+        // -k always consumes a parameter if provided (IRC convention)
+        if (paramIndex < params.size())
           paramIndex++;
+        if (channel.hasKey()) {
+          std::string old_key = channel.getKey();
+          channel.removeKey();
+          applied_params += " " + old_key;
+          mode_applied = true;
         }
       }
-    } else {
-      _server->sendReply(
-          client, ERR_UNKNOWNMODE(client.getNickname(), std::string(1, c)));
+      break;
+
+    // +l <limit> / -l : set or remove user limit
+    case 'l':
+      if (adding) {
+        if (paramIndex >= params.size())
+          break;
+        // Strict numeric validation with overflow protection
+        const char *str = params[paramIndex].c_str();
+        char *endptr = NULL;
+        errno = 0;
+        long limit = std::strtol(str, &endptr, 10);
+        paramIndex++;
+        // Reject on overflow, non-positive values, trailing garbage
+        if (errno == ERANGE || limit <= 0 || limit > LONG_MAX / 2 ||
+            endptr == str || *endptr != '\0')
+          break;
+        channel.setUserLimit(static_cast<size_t>(limit));
+        applied_params += " " + params[paramIndex - 1];
+        mode_applied = true;
+      } else {
+        if (channel.hasUserLimit()) {
+          channel.removeUserLimit();
+          mode_applied = true;
+        }
+      }
+      break;
+
+    // +o <nick> / -o <nick> : grant or revoke operator status
+    case 'o':
+      if (paramIndex >= params.size())
+        break;
+      {
+        std::string targetNick = params[paramIndex++];
+        Client *target = _server->getClientByNickname(targetNick);
+        if (!target) {
+          _server->sendReply(client, ERR_NOSUCHNICK(nick, targetNick));
+          break;
+        }
+        // Target must be a member of the channel to receive/lose op
+        if (!channel.isMember(target)) {
+          _server->sendReply(client, ERR_USERNOTINCHANNEL(nick, targetNick,
+                                                          channel.getName()));
+          break;
+        }
+        if (adding)
+          channel.addOperator(target);
+        else
+          channel.removeOperator(target);
+        applied_params += " " + targetNick;
+        mode_applied = true;
+      }
+      break;
+
+    default:
+      _server->sendReply(client, ERR_UNKNOWNMODE(nick, std::string(1, c)));
+      break;
     }
 
+    // Accumulate applied flags; only emit a new sign when direction changes
     if (mode_applied) {
       if (pending_sign || applied_modes.empty()) {
         applied_modes += current_sign;
@@ -765,6 +855,7 @@ void CommandHandler::_applyModes(Client &client, Channel &channel,
     }
   }
 
+  // Broadcast the effective mode change to all channel members (if any applied)
   if (!applied_modes.empty()) {
     std::string msg = ":" + client.getPrefix() + " MODE " + channel.getName() +
                       " " + applied_modes + applied_params;
@@ -787,6 +878,7 @@ void CommandHandler::_handleKick(Client &client,
   std::string targetNicksStr = args[1];
   std::string reason = (args.size() > 2) ? args[2] : client.getNickname();
 
+  // 1. Parse comma-separated channel and target lists
   std::vector<std::string> channels;
   std::stringstream ssChan(channelNamesStr);
   std::string t;
@@ -805,12 +897,15 @@ void CommandHandler::_handleKick(Client &client,
   if (channels.empty() || targets.empty())
     return;
 
+  // 2. Pair targets with channels: if multiple channels, each target maps
+  //    to its positional channel; otherwise all targets use the single channel
   bool multiple_channels = (channels.size() > 1);
   for (size_t j = 0; j < targets.size(); ++j) {
     std::string targetNick = targets[j];
     std::string channelName =
         multiple_channels && j < channels.size() ? channels[j] : channels[0];
 
+    // 3. Validate channel exists and invoker has operator privileges
     Channel *channel = _server->getChannel(channelName);
     if (!channel) {
       _server->sendReply(client,
@@ -823,6 +918,7 @@ void CommandHandler::_handleKick(Client &client,
       continue;
     }
 
+    // 4. Validate target exists and is a member of the channel
     Client *target = _server->getClientByNickname(targetNick);
     if (!target || !channel->isMember(target)) {
       _server->sendReply(client, ERR_USERNOTINCHANNEL(client.getNickname(),
@@ -830,6 +926,7 @@ void CommandHandler::_handleKick(Client &client,
       continue;
     }
 
+    // 5. Broadcast KICK, remove member, and clean up empty channels
     std::string msg = ":" + client.getPrefix() + " KICK " + channelName + " " +
                       targetNick + " :" + reason;
     channel->broadcastMessage(msg, NULL);
@@ -876,6 +973,7 @@ void CommandHandler::_handleNotice(Client &client,
   std::string target = args[0];
   std::string text = args[1];
 
+  // Channel target: broadcast to members (sender excluded, per RFC)
   if (target[0] == '#' || target[0] == '&') {
     Channel *channel = _server->getChannel(target);
     if (channel && channel->isMember(&client)) {
@@ -883,6 +981,7 @@ void CommandHandler::_handleNotice(Client &client,
                                     " :" + text,
                                 &client);
     }
+    // User target: deliver directly, silently drop if user not found
   } else {
     Client *target_client = _server->getClientByNickname(target);
     if (target_client) {
@@ -899,6 +998,7 @@ void CommandHandler::_handleNotice(Client &client,
 
 void CommandHandler::_handleCap(Client &client,
                                 const std::vector<std::string> &args) {
+  // CAP LS: reply with an empty capability list (we don't support any)
   if (!args.empty() && args[0] == "LS") {
     std::string msg = ":" + IRC::Identity::SERVER_NAME + " CAP * LS :\r\n";
     _server->sendToClient(client, msg);
@@ -946,6 +1046,7 @@ void CommandHandler::_handleList(Client &client,
        it != channels.end(); ++it) {
     Channel *channel = it->second;
 
+    // If a specific channel was requested, skip all others
     if (!args.empty() && args[0] != channel->getName())
       continue;
 

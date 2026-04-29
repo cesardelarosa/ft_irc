@@ -61,6 +61,8 @@ void Client::updateActivity() { this->_last_activity = std::time(NULL); }
 // ──────────────────────────── Write buffer ───────────────────────
 
 void Client::queueMessage(const std::string &msg) {
+  // Send buffer full: mark client for disconnection to prevent memory
+  // exhaustion
   if (this->_send_buffer.size() + msg.size() > IRC::Limits::SEND_BUFFER_MAX) {
     this->_disconnected = true;
     this->_quit_reason = "SendQ Exceeded";
